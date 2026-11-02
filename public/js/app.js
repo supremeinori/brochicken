@@ -1,0 +1,1902 @@
+// Bro Chicken CRM - Frontend Application (Antislop-UI Compliant)
+let currentUser = null;
+let currentRoute = 'dashboard';
+let currentSubId = null;
+
+// Helper: Toast Notification
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type === 'error' ? 'toast-error' : 'toast-success'}`;
+  toast.innerText = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.remove();
+  }, 4000);
+}
+
+// Helper: Format Date Indonesia (Asia/Jakarta representation)
+function formatDateIndo(isoStr) {
+  if (!isoStr) return '-';
+  try {
+    const d = new Date(isoStr);
+    return d.toLocaleString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return isoStr;
+  }
+}
+
+// Helper: Close Modal
+function closeModal() {
+  const container = document.getElementById('modal-container');
+  container.innerHTML = '';
+}
+
+// Fixed Business Category & Status Labels
+const categoryLabels = {
+  FOOD_QUALITY: 'Kualitas Makanan',
+  WRONG_ORDER: 'Pesanan Tidak Sesuai',
+  DELIVERY_DELAY: 'Keterlambatan Pengiriman',
+  SERVICE: 'Pelayanan Outlet',
+  CLEANLINESS: 'Kebersihan',
+  OTHER: 'Lainnya'
+};
+
+const priorityLabels = {
+  LOW: 'Rendah',
+  MEDIUM: 'Sedang',
+  HIGH: 'Tinggi'
+};
+
+const statusLabels = {
+  NEW: 'Baru',
+  IN_PROGRESS: 'Diproses',
+  RESOLVED: 'Selesai'
+};
+
+// Application Shell
+function renderShell() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="/images/logo.png" alt="Bro Chicken Logo" class="sidebar-logo">
+        <div class="sidebar-title">
+          <h1>Bro Chicken</h1>
+          <p>Operasional CRM</p>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#dashboard" class="${currentRoute === 'dashboard' ? 'active' : ''}" onclick="navigate('dashboard')">
+          <span>Beranda Operasional</span>
+        </a>
+        <a href="#customers" class="${currentRoute === 'customers' || currentRoute === 'customer-detail' ? 'active' : ''}" onclick="navigate('customers')">
+          <span>Daftar Pelanggan</span>
+        </a>
+        <a href="#complaints" class="${currentRoute === 'complaints' || currentRoute === 'complaint-detail' ? 'active' : ''}" onclick="navigate('complaints')">
+          <span>Keluhan & Tiket</span>
+        </a>
+        <a href="#whatsapp" class="${currentRoute === 'whatsapp' ? 'active' : ''}" onclick="navigate('whatsapp')">
+          <span>Template WhatsApp</span>
+        </a>
+        <a href="#reports" class="${currentRoute === 'reports' ? 'active' : ''}" onclick="navigate('reports')">
+          <span>Laporan & SLA</span>
+        </a>
+        ${currentUser.role === 'OWNER' ? `
+          <a href="#admin" class="${currentRoute === 'admin' ? 'active' : ''}" onclick="navigate('admin')">
+            <span>Kelola Akun Admin</span>
+          </a>
+          <a href="#settings" class="${currentRoute === 'settings' ? 'active' : ''}" onclick="navigate('settings')">
+            <span>Pengaturan Sistem</span>
+          </a>
+        ` : ''}
+      </nav>
+
+      <div class="sidebar-user">
+        <div class="user-meta">
+          <span class="user-name">${currentUser.name}</span>
+          <span class="user-role">${currentUser.role === 'OWNER' ? 'Pemilik (Owner)' : 'Staf Admin'}</span>
+        </div>
+        <button class="btn-logout" onclick="handleLogout()">Keluar</button>
+      </div>
+    </aside>
+
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div class="topbar-title" id="page-title">Bro Chicken CRM</div>
+        <div class="topbar-actions" id="topbar-actions">
+          <span class="badge badge-neutral" style="font-weight: 500;">
+            Cabang Margonda &bull; ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </span>
+        </div>
+      </header>
+
+      <main class="content-body" id="content-area">
+        <!-- Render View Konten -->
+      </main>
+    </div>
+  `;
+}
+
+// Router Navigation
+function navigate(route, id = null) {
+  currentRoute = route;
+  currentSubId = id;
+
+  const links = document.querySelectorAll('.sidebar-nav a');
+  links.forEach(l => l.classList.remove('active'));
+
+  if (route === 'dashboard') {
+    document.getElementById('page-title').innerText = 'Ringkasan Operasional CRM';
+    renderDashboard();
+  } else if (route === 'customers') {
+    document.getElementById('page-title').innerText = 'Basis Data Pelanggan';
+    renderCustomers();
+  } else if (route === 'customer-detail') {
+    document.getElementById('page-title').innerText = 'Detail Profil Pelanggan';
+    renderCustomerDetail(id);
+  } else if (route === 'complaints') {
+    document.getElementById('page-title').innerText = 'Daftar Tiket & Keluhan Pelanggan';
+    renderComplaints();
+  } else if (route === 'complaint-detail') {
+    document.getElementById('page-title').innerText = 'Detail & Tindak Lanjut Tiket';
+    renderComplaintDetail(id);
+  } else if (route === 'whatsapp') {
+    document.getElementById('page-title').innerText = 'Studio Pesan WhatsApp';
+    renderWhatsApp();
+  } else if (route === 'reports') {
+    document.getElementById('page-title').innerText = 'Laporan Kinerja & Kepatuhan SLA';
+    renderReports();
+  } else if (route === 'admin') {
+    document.getElementById('page-title').innerText = 'Manajemen Akun Staf Admin';
+    renderAdmin();
+  } else if (route === 'settings') {
+    document.getElementById('page-title').innerText = 'Pengaturan Sistem & Database';
+    renderSettings();
+  }
+}
+
+// -------------------------------------------------------------
+// 1. LOGIN VIEW
+// -------------------------------------------------------------
+function renderLogin() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="login-screen">
+      <div class="login-card">
+        <div class="login-header">
+          <img src="/images/logo.png" alt="Bro Chicken Logo" class="login-logo">
+          <h1>Bro Chicken CRM</h1>
+          <p>Sistem Layanan Pelanggan & Penanganan Keluhan</p>
+        </div>
+
+        <form id="login-form" onsubmit="handleLoginSubmit(event)">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" id="login-username" class="form-control" placeholder="Contoh: haji_rahmat atau budi_santoso" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kata Sandi</label>
+            <input type="password" id="login-password" class="form-control" placeholder="Masukkan kata sandi" required>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 10px; margin-top: 8px;">
+            Masuk ke Sistem
+          </button>
+        </form>
+
+        <div style="margin-top: 24px; padding: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 11px; color: #64748B;">
+          <strong>Kredensial Akun Pengujian:</strong><br>
+          &bull; <strong>Owner:</strong> <code>owner</code> &bull; Sandi: <code>12345678</code><br>
+          &bull; <strong>Admin:</strong> <code>admin</code> &bull; Sandi: <code>12345678</code>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function handleLoginSubmit(e) {
+  e.preventDefault();
+  const username = document.getElementById('login-username').value;
+  const password = document.getElementById('login-password').value;
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (data.success) {
+      currentUser = data.user;
+      showToast(data.message);
+      renderShell();
+      navigate('dashboard');
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal terhubung ke server.', 'error');
+  }
+}
+
+async function handleLogout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    currentUser = null;
+    showToast('Berhasil keluar dari sistem.');
+    renderLogin();
+  } catch (err) {
+    showToast('Gagal keluar sesi.', 'error');
+  }
+}
+
+// -------------------------------------------------------------
+// 2. DASHBOARD VIEW
+// -------------------------------------------------------------
+async function renderDashboard() {
+  const content = document.getElementById('content-area');
+  content.innerHTML = '<div class="empty-state">Memuat ringkasan data operasional...</div>';
+
+  try {
+    const res = await fetch('/api/dashboard?period=this_month');
+    const json = await res.json();
+    const d = json.data;
+
+    content.innerHTML = `
+      <div class="toolbar" style="margin-bottom: 20px;">
+        <div class="toolbar-left">
+          <label style="font-size: 13px; font-weight: 600; color: #334155;">Periode Filter:</label>
+          <select class="form-control" style="width: 180px;" onchange="loadDashboardPeriod(this.value)">
+            <option value="this_month" selected>Bulan Ini</option>
+            <option value="today">Hari Ini</option>
+            <option value="7days">7 Hari Terakhir</option>
+            <option value="30days">30 Hari Terakhir</option>
+          </select>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn btn-secondary btn-sm" onclick="openAddCustomerModal()">+ Tambah Pelanggan</button>
+          <button class="btn btn-primary btn-sm" onclick="openCreateTicketModal()">+ Catat Keluhan</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-card-title">Total Pelanggan Aktif</div>
+          <div class="stat-card-value">${d.total_active_customers}</div>
+          <div class="stat-card-sub">Terdaftar dalam database</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">Pelanggan Baru (Periode Ini)</div>
+          <div class="stat-card-value" style="color: var(--primary);">${d.new_customers_in_period}</div>
+          <div class="stat-card-sub">Bergabung bulan ini</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">Tiket Keluhan Aktif</div>
+          <div class="stat-card-value">${d.tickets.new + d.tickets.in_progress}</div>
+          <div class="stat-card-sub">${d.tickets.new} Baru &bull; ${d.tickets.in_progress} Diproses</div>
+        </div>
+        <div class="stat-card ${d.tickets.overdue > 0 ? 'stat-card-danger' : ''}">
+          <div class="stat-card-title">Lewat Batas Respons SLA</div>
+          <div class="stat-card-value">${d.tickets.overdue}</div>
+          <div class="stat-card-sub">${d.tickets.overdue > 0 ? 'Memerlukan respons segera' : 'Seluruh tiket dalam batas waktu'}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>5 Keluhan Terbaru</h2>
+            <p>Keluhan pelanggan terkini dan status batas waktu respons</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="navigate('complaints')">Lihat Semua Tiket</button>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>ID Tiket</th>
+                <th>Nama Pelanggan</th>
+                <th>Kategori</th>
+                <th>Prioritas</th>
+                <th>Status</th>
+                <th>PIC Admin</th>
+                <th>Batas Waktu Respons</th>
+                <th style="text-align: right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${d.recent_tickets.length > 0 ? d.recent_tickets.map(t => `
+                <tr>
+                  <td><strong>${t.ticket_code}</strong></td>
+                  <td>${t.customer_name}</td>
+                  <td>${categoryLabels[t.category] || t.category}</td>
+                  <td>
+                    <span class="badge ${t.priority === 'HIGH' ? 'badge-danger' : (t.priority === 'MEDIUM' ? 'badge-warning' : 'badge-neutral')}">
+                      ${priorityLabels[t.priority] || t.priority}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="badge ${t.status === 'NEW' ? 'badge-info' : (t.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-success')}">
+                      ${statusLabels[t.status] || t.status}
+                    </span>
+                  </td>
+                  <td>${t.assigned_to_name || '-'}</td>
+                  <td>
+                    <span class="badge ${t.sla_class}">${t.sla_label}</span>
+                  </td>
+                  <td style="text-align: right;">
+                    <button class="btn btn-secondary btn-sm" onclick="navigate('complaint-detail', ${t.id})">Tindak Lanjut</button>
+                  </td>
+                </tr>
+              `).join('') : `
+                <tr>
+                  <td colspan="8">
+                    <div class="empty-state">
+                      Tidak ada keluhan yang tercatat pada periode ini.
+                      <div class="empty-state-sub">Semua layanan pelanggan berjalan normal.</div>
+                    </div>
+                  </td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = '<div class="empty-state" style="color: #B91C1C;">Gagal memuat ringkasan data dashboard.</div>';
+  }
+}
+
+async function loadDashboardPeriod(period) {
+  renderDashboard();
+}
+
+// -------------------------------------------------------------
+// 3. CUSTOMERS VIEW
+// -------------------------------------------------------------
+let customerSearchParams = { search: '', source: '', status: 'ACTIVE', page: 1 };
+
+async function renderCustomers() {
+  const content = document.getElementById('content-area');
+  content.innerHTML = `
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input type="text" id="cust-search" class="form-control search-input" placeholder="Cari nama, nomor WA, ID..." value="${customerSearchParams.search}" oninput="handleCustomerSearch(this.value)">
+        <select class="form-control" style="width: 150px;" onchange="handleCustomerSourceFilter(this.value)">
+          <option value="">Semua Sumber</option>
+          <option value="DIRECT" ${customerSearchParams.source === 'DIRECT' ? 'selected' : ''}>Langsung</option>
+          <option value="GOFOOD" ${customerSearchParams.source === 'GOFOOD' ? 'selected' : ''}>GoFood</option>
+          <option value="GRABFOOD" ${customerSearchParams.source === 'GRABFOOD' ? 'selected' : ''}>GrabFood</option>
+          <option value="OTHER" ${customerSearchParams.source === 'OTHER' ? 'selected' : ''}>Lainnya</option>
+        </select>
+        <select class="form-control" style="width: 150px;" onchange="handleCustomerStatusFilter(this.value)">
+          <option value="ACTIVE" ${customerSearchParams.status === 'ACTIVE' ? 'selected' : ''}>Status: Aktif</option>
+          <option value="ARCHIVED" ${customerSearchParams.status === 'ARCHIVED' ? 'selected' : ''}>Status: Diarsipkan</option>
+          <option value="" ${customerSearchParams.status === '' ? 'selected' : ''}>Semua Status</option>
+        </select>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-primary" onclick="openAddCustomerModal()">+ Tambah Pelanggan</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <div class="table-container" style="border: none;">
+        <table id="customer-table">
+          <thead>
+            <tr>
+              <th>ID Pelanggan</th>
+              <th>Nama Lengkap</th>
+              <th>Nomor WhatsApp</th>
+              <th>Sumber</th>
+              <th>Terdaftar</th>
+              <th>Status</th>
+              <th style="text-align: right;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="customer-tbody">
+            <tr><td colspan="7"><div class="empty-state">Memuat data pelanggan...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding: 12px 20px; background: #F8FAFC; border-top: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center;" id="customer-pagination">
+        <!-- Paginasi -->
+      </div>
+    </div>
+  `;
+
+  loadCustomersData();
+}
+
+let searchDebounceTimer = null;
+function handleCustomerSearch(val) {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    customerSearchParams.search = val;
+    customerSearchParams.page = 1;
+    loadCustomersData();
+  }, 300);
+}
+
+function handleCustomerSourceFilter(val) {
+  customerSearchParams.source = val;
+  customerSearchParams.page = 1;
+  loadCustomersData();
+}
+
+function handleCustomerStatusFilter(val) {
+  customerSearchParams.status = val;
+  customerSearchParams.page = 1;
+  loadCustomersData();
+}
+
+async function loadCustomersData() {
+  const tbody = document.getElementById('customer-tbody');
+  const paginationDiv = document.getElementById('customer-pagination');
+
+  const q = new URLSearchParams(customerSearchParams).toString();
+  try {
+    const res = await fetch(`/api/customers?${q}`);
+    const json = await res.json();
+    const customers = json.data;
+    const pag = json.pagination;
+
+    if (!customers || customers.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              Tidak ada data pelanggan yang sesuai dengan kriteria pencarian.
+              <div class="empty-state-sub">Ubah kata kunci pencarian atau sesuaikan filter sumber dan status.</div>
+            </div>
+          </td>
+        </tr>
+      `;
+      paginationDiv.innerHTML = '';
+      return;
+    }
+
+    tbody.innerHTML = customers.map(c => `
+      <tr>
+        <td><strong>${c.customer_code}</strong></td>
+        <td>
+          <a href="#customer-detail" onclick="navigate('customer-detail', ${c.id})" style="color: var(--text-main); font-weight: 600; text-decoration: none;">
+            ${c.name}
+          </a>
+        </td>
+        <td>
+          <a href="https://wa.me/${c.phone}" target="_blank" style="color: #15803D; text-decoration: none; font-weight: 500;">
+            +${c.phone}
+          </a>
+        </td>
+        <td>
+          <span class="badge badge-neutral">${c.source}</span>
+        </td>
+        <td>${formatDateIndo(c.joined_at)}</td>
+        <td>
+          <span class="badge ${c.status === 'ACTIVE' ? 'badge-success' : 'badge-neutral'}">
+            ${c.status === 'ACTIVE' ? 'Aktif' : 'Diarsipkan'}
+          </span>
+        </td>
+        <td style="text-align: right;">
+          <button class="btn btn-secondary btn-sm" onclick="navigate('customer-detail', ${c.id})">Detail</button>
+          <button class="btn btn-secondary btn-sm" onclick="openEditCustomerModal(${c.id})">Ubah</button>
+          ${c.status === 'ACTIVE'
+            ? `<button class="btn btn-secondary btn-sm" style="color: #B91C1C;" onclick="openArchiveModal(${c.id}, '${c.name.replace(/'/g, "\\'")}')">Arsipkan</button>`
+            : `<button class="btn btn-secondary btn-sm" style="color: #15803D;" onclick="handleActivateCustomer(${c.id})">Aktifkan</button>`
+          }
+        </td>
+      </tr>
+    `).join('');
+
+    paginationDiv.innerHTML = `
+      <span style="font-size: 12px; color: #64748B;">Menampilkan ${(pag.page - 1) * pag.limit + 1} - ${Math.min(pag.page * pag.limit, pag.total)} dari ${pag.total} pelanggan</span>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn btn-secondary btn-sm" ${pag.page <= 1 ? 'disabled' : ''} onclick="changeCustomerPage(${pag.page - 1})">Sebelumnya</button>
+        <button class="btn btn-secondary btn-sm" ${pag.page >= pag.totalPages ? 'disabled' : ''} onclick="changeCustomerPage(${pag.page + 1})">Selanjutnya</button>
+      </div>
+    `;
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="color: #B91C1C;">Gagal memuat data pelanggan.</div></td></tr>';
+  }
+}
+
+function changeCustomerPage(p) {
+  customerSearchParams.page = p;
+  loadCustomersData();
+}
+
+// Modal: Tambah Pelanggan
+function openAddCustomerModal() {
+  const container = document.getElementById('modal-container');
+  container.innerHTML = `
+    <div class="modal-scrim" onclick="if(event.target === this) closeModal()">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Tambah Pelanggan Baru</h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form onsubmit="handleAddCustomerSubmit(event)">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Nama Lengkap *</label>
+              <input type="text" id="add-cust-name" class="form-control" placeholder="Contoh: Hendra Kusuma" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nomor WhatsApp *</label>
+              <input type="text" id="add-cust-phone" class="form-control" placeholder="Contoh: 08123456789 atau 628123456789" required>
+              <div class="form-helper">Format dinormalisasi otomatis menjadi awalan 62 (contoh: 628123456789).</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sumber Pemesanan *</label>
+              <select id="add-cust-source" class="form-control" required>
+                <option value="DIRECT">Langsung (Outlet)</option>
+                <option value="GOFOOD">GoFood</option>
+                <option value="GRABFOOD">GrabFood</option>
+                <option value="OTHER">Lainnya</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Catatan Preferensi</label>
+              <textarea id="add-cust-notes" class="form-control" placeholder="Catatan preferensi atau menu favorit pelanggan..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
+            <button type="submit" class="btn btn-primary">Simpan Pelanggan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+async function handleAddCustomerSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('add-cust-name').value;
+  const phone = document.getElementById('add-cust-phone').value;
+  const source = document.getElementById('add-cust-source').value;
+  const notes = document.getElementById('add-cust-notes').value;
+
+  try {
+    const res = await fetch('/api/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone, source, notes })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      closeModal();
+      if (currentRoute === 'customers') loadCustomersData();
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal menambahkan pelanggan.', 'error');
+  }
+}
+
+// Modal: Ubah Data Pelanggan
+async function openEditCustomerModal(id) {
+  try {
+    const res = await fetch(`/api/customers/${id}`);
+    const data = await res.json();
+    const c = data.customer;
+
+    const container = document.getElementById('modal-container');
+    container.innerHTML = `
+      <div class="modal-scrim" onclick="if(event.target === this) closeModal()">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Ubah Data Pelanggan (${c.customer_code})</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+          </div>
+          <form onsubmit="handleEditCustomerSubmit(event, ${c.id})">
+            <div class="modal-body">
+              <div class="form-group">
+                <label class="form-label">Nama Lengkap *</label>
+                <input type="text" id="edit-cust-name" class="form-control" value="${c.name}" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Nomor WhatsApp *</label>
+                <input type="text" id="edit-cust-phone" class="form-control" value="${c.phone}" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sumber Pemesanan *</label>
+                <select id="edit-cust-source" class="form-control" required>
+                  <option value="DIRECT" ${c.source === 'DIRECT' ? 'selected' : ''}>Langsung (Outlet)</option>
+                  <option value="GOFOOD" ${c.source === 'GOFOOD' ? 'selected' : ''}>GoFood</option>
+                  <option value="GRABFOOD" ${c.source === 'GRABFOOD' ? 'selected' : ''}>GrabFood</option>
+                  <option value="OTHER" ${c.source === 'OTHER' ? 'selected' : ''}>Lainnya</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Catatan Preferensi</label>
+                <textarea id="edit-cust-notes" class="form-control">${c.notes || ''}</textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
+              <button type="submit" class="btn btn-primary">Perbarui Data</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    showToast('Gagal mengambil data pelanggan.', 'error');
+  }
+}
+
+async function handleEditCustomerSubmit(e, id) {
+  e.preventDefault();
+  const name = document.getElementById('edit-cust-name').value;
+  const phone = document.getElementById('edit-cust-phone').value;
+  const source = document.getElementById('edit-cust-source').value;
+  const notes = document.getElementById('edit-cust-notes').value;
+
+  try {
+    const res = await fetch(`/api/customers/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone, source, notes })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      closeModal();
+      if (currentRoute === 'customers') loadCustomersData();
+      if (currentRoute === 'customer-detail') renderCustomerDetail(id);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal memperbarui data.', 'error');
+  }
+}
+
+// Modal: Konfirmasi Arsipkan Pelanggan
+function openArchiveModal(id, name) {
+  const container = document.getElementById('modal-container');
+  container.innerHTML = `
+    <div class="modal-scrim" onclick="if(event.target === this) closeModal()">
+      <div class="modal-content" style="max-width: 440px;">
+        <div class="modal-header">
+          <h3>Konfirmasi Pengarsipan</h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: #334155; margin-bottom: 12px;">
+            Apakah Anda yakin ingin menonaktifkan pelanggan <strong>${name}</strong>?
+          </p>
+          <div style="background: #FFFBEB; border: 1px solid #FDE68A; padding: 12px; border-radius: 6px; font-size: 12px; color: #92400E;">
+            <strong>Ketentuan Integritas Data:</strong> Data pelanggan tidak dihapus permanen. Seluruh tiket keluhan tetap tersimpan dan dapat diaktifkan kembali sewaktu-waktu.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
+          <button type="button" class="btn btn-danger" onclick="confirmArchiveCustomer(${id})">Ya, Arsipkan</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function confirmArchiveCustomer(id) {
+  try {
+    const res = await fetch(`/api/customers/${id}/archive`, { method: 'PATCH' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      closeModal();
+      if (currentRoute === 'customers') loadCustomersData();
+      if (currentRoute === 'customer-detail') renderCustomerDetail(id);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal mengarsipkan pelanggan.', 'error');
+  }
+}
+
+async function handleActivateCustomer(id) {
+  try {
+    const res = await fetch(`/api/customers/${id}/activate`, { method: 'PATCH' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      if (currentRoute === 'customers') loadCustomersData();
+      if (currentRoute === 'customer-detail') renderCustomerDetail(id);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal mengaktifkan pelanggan.', 'error');
+  }
+}
+
+// -------------------------------------------------------------
+// 4. CUSTOMER DETAIL VIEW
+// -------------------------------------------------------------
+async function renderCustomerDetail(id) {
+  const content = document.getElementById('content-area');
+  content.innerHTML = '<div class="empty-state">Memuat profil pelanggan...</div>';
+
+  try {
+    const res = await fetch(`/api/customers/${id}`);
+    const data = await res.json();
+    const c = data.customer;
+    const complaints = data.complaints;
+
+    const initials = c.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+    content.innerHTML = `
+      <div style="margin-bottom: 16px;">
+        <button class="btn btn-secondary btn-sm" onclick="navigate('customers')">Kembali ke Daftar Pelanggan</button>
+      </div>
+
+      <div class="card" style="margin-bottom: 24px;">
+        <div style="display: flex; gap: 20px; align-items: flex-start; justify-content: space-between;">
+          <div style="display: flex; gap: 16px; align-items: center;">
+            <div style="width: 52px; height: 52px; border-radius: var(--radius-md); background: #FFEDD5; color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700;">
+              ${initials}
+            </div>
+            <div>
+              <h2 style="font-size: 18px; font-weight: 700; color: #0F172A; margin-bottom: 4px;">
+                ${c.name}
+                <span class="badge ${c.status === 'ACTIVE' ? 'badge-success' : 'badge-neutral'}" style="margin-left: 8px;">
+                  ${c.status === 'ACTIVE' ? 'Aktif' : 'Diarsipkan'}
+                </span>
+              </h2>
+              <div style="font-size: 13px; color: #64748B;">
+                Kode: <strong>${c.customer_code}</strong> &bull; Terdaftar sejak ${formatDateIndo(c.joined_at)} &bull; Sumber: <span class="badge badge-neutral">${c.source}</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <a href="https://wa.me/${c.phone}" target="_blank" class="btn btn-success btn-sm">
+              Kirim Pesan WhatsApp (+${c.phone})
+            </a>
+            <button class="btn btn-secondary btn-sm" onclick="openEditCustomerModal(${c.id})">Ubah Profil</button>
+            ${c.status === 'ACTIVE'
+              ? `<button class="btn btn-secondary btn-sm" style="color: #B91C1C;" onclick="openArchiveModal(${c.id}, '${c.name.replace(/'/g, "\\'")}')">Arsipkan</button>`
+              : `<button class="btn btn-secondary btn-sm" style="color: #15803D;" onclick="handleActivateCustomer(${c.id})">Aktifkan Kembali</button>`
+            }
+          </div>
+        </div>
+
+        <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #E2E8F0;">
+          <h4 style="font-size: 12px; font-weight: 600; color: #64748B; margin-bottom: 6px;">Catatan Preferensi Pelanggan</h4>
+          <p style="font-size: 13px; color: #334155; background: #F8FAFC; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid #E2E8F0;">
+            ${c.notes || 'Tidak ada catatan preferensi khusus.'}
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Riwayat Tiket Keluhan</h2>
+            <p>Seluruh tiket keluhan yang tercatat atas nama pelanggan ini</p>
+          </div>
+          ${c.status === 'ACTIVE' ? `<button class="btn btn-primary btn-sm" onclick="openCreateTicketModal(${c.id})">+ Catat Keluhan Baru</button>` : ''}
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>ID Tiket</th>
+                <th>Kategori</th>
+                <th>Prioritas</th>
+                <th>Deskripsi Keluhan</th>
+                <th>Status</th>
+                <th>PIC Admin</th>
+                <th>Waktu Dibuat</th>
+                <th style="text-align: right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${complaints && complaints.length > 0 ? complaints.map(t => `
+                <tr>
+                  <td><strong>${t.ticket_code}</strong></td>
+                  <td>${categoryLabels[t.category] || t.category}</td>
+                  <td>
+                    <span class="badge ${t.priority === 'HIGH' ? 'badge-danger' : (t.priority === 'MEDIUM' ? 'badge-warning' : 'badge-neutral')}">
+                      ${priorityLabels[t.priority] || t.priority}
+                    </span>
+                  </td>
+                  <td style="max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${t.description}</td>
+                  <td>
+                    <span class="badge ${t.status === 'NEW' ? 'badge-info' : (t.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-success')}">
+                      ${statusLabels[t.status] || t.status}
+                    </span>
+                  </td>
+                  <td>${t.assigned_to_name || '-'}</td>
+                  <td>${formatDateIndo(t.created_at)}</td>
+                  <td style="text-align: right;">
+                    <button class="btn btn-secondary btn-sm" onclick="navigate('complaint-detail', ${t.id})">Lihat Detail</button>
+                  </td>
+                </tr>
+              `).join('') : `
+                <tr>
+                  <td colspan="8">
+                    <div class="empty-state">
+                      Pelanggan ini belum pernah memiliki keluhan.
+                      <div class="empty-state-sub">Semua pesanan sebelumnya tercatat berjalan lancar.</div>
+                    </div>
+                  </td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = '<div class="empty-state" style="color: #B91C1C;">Gagal memuat profil pelanggan.</div>';
+  }
+}
+
+// -------------------------------------------------------------
+// 5. COMPLAINTS VIEW
+// -------------------------------------------------------------
+let complaintSearchParams = { search: '', status: '', priority: '', category: '', page: 1 };
+
+async function renderComplaints() {
+  const content = document.getElementById('content-area');
+  content.innerHTML = `
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input type="text" class="form-control search-input" placeholder="Cari ID tiket, nama pelanggan..." value="${complaintSearchParams.search}" oninput="handleComplaintSearch(this.value)">
+        <select class="form-control" style="width: 140px;" onchange="handleComplaintStatusFilter(this.value)">
+          <option value="">Semua Status</option>
+          <option value="NEW" ${complaintSearchParams.status === 'NEW' ? 'selected' : ''}>Baru</option>
+          <option value="IN_PROGRESS" ${complaintSearchParams.status === 'IN_PROGRESS' ? 'selected' : ''}>Diproses</option>
+          <option value="RESOLVED" ${complaintSearchParams.status === 'RESOLVED' ? 'selected' : ''}>Selesai</option>
+        </select>
+        <select class="form-control" style="width: 140px;" onchange="handleComplaintPriorityFilter(this.value)">
+          <option value="">Semua Prioritas</option>
+          <option value="HIGH" ${complaintSearchParams.priority === 'HIGH' ? 'selected' : ''}>Tinggi</option>
+          <option value="MEDIUM" ${complaintSearchParams.priority === 'MEDIUM' ? 'selected' : ''}>Sedang</option>
+          <option value="LOW" ${complaintSearchParams.priority === 'LOW' ? 'selected' : ''}>Rendah</option>
+        </select>
+        <select class="form-control" style="width: 180px;" onchange="handleComplaintCategoryFilter(this.value)">
+          <option value="">Semua Kategori</option>
+          <option value="FOOD_QUALITY">Kualitas Makanan</option>
+          <option value="WRONG_ORDER">Pesanan Tidak Sesuai</option>
+          <option value="DELIVERY_DELAY">Keterlambatan</option>
+          <option value="SERVICE">Pelayanan Outlet</option>
+          <option value="CLEANLINESS">Kebersihan</option>
+          <option value="OTHER">Lainnya</option>
+        </select>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-primary" onclick="openCreateTicketModal()">+ Catat Keluhan Baru</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <div class="table-container" style="border: none;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID Tiket</th>
+              <th>Pelanggan</th>
+              <th>Kategori</th>
+              <th>Prioritas</th>
+              <th>Status</th>
+              <th>PIC Admin</th>
+              <th>Batas Waktu Respons</th>
+              <th style="text-align: right;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="complaint-tbody">
+            <tr><td colspan="8"><div class="empty-state">Memuat tiket...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding: 12px 20px; background: #F8FAFC; border-top: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center;" id="complaint-pagination"></div>
+    </div>
+  `;
+
+  loadComplaintsData();
+}
+
+function handleComplaintSearch(val) {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    complaintSearchParams.search = val;
+    complaintSearchParams.page = 1;
+    loadComplaintsData();
+  }, 300);
+}
+
+function handleComplaintStatusFilter(val) {
+  complaintSearchParams.status = val;
+  complaintSearchParams.page = 1;
+  loadComplaintsData();
+}
+
+function handleComplaintPriorityFilter(val) {
+  complaintSearchParams.priority = val;
+  complaintSearchParams.page = 1;
+  loadComplaintsData();
+}
+
+function handleComplaintCategoryFilter(val) {
+  complaintSearchParams.category = val;
+  complaintSearchParams.page = 1;
+  loadComplaintsData();
+}
+
+async function loadComplaintsData() {
+  const tbody = document.getElementById('complaint-tbody');
+  const paginationDiv = document.getElementById('complaint-pagination');
+
+  const q = new URLSearchParams(complaintSearchParams).toString();
+  try {
+    const res = await fetch(`/api/complaints?${q}`);
+    const json = await res.json();
+    const tickets = json.data;
+    const pag = json.pagination;
+
+    if (!tickets || tickets.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8">
+            <div class="empty-state">
+              Tidak ada tiket keluhan yang sesuai dengan filter saat ini.
+              <div class="empty-state-sub">Ubah filter status/kategori atau buat tiket keluhan baru.</div>
+            </div>
+          </td>
+        </tr>
+      `;
+      paginationDiv.innerHTML = '';
+      return;
+    }
+
+    tbody.innerHTML = tickets.map(t => `
+      <tr>
+        <td><strong>${t.ticket_code}</strong></td>
+        <td>
+          <a href="#customer-detail" onclick="navigate('customer-detail', ${t.customer_id})" style="color: var(--text-main); font-weight: 600; text-decoration: none;">
+            ${t.customer_name}
+          </a>
+        </td>
+        <td>${categoryLabels[t.category] || t.category}</td>
+        <td>
+          <span class="badge ${t.priority === 'HIGH' ? 'badge-danger' : (t.priority === 'MEDIUM' ? 'badge-warning' : 'badge-neutral')}">
+            ${priorityLabels[t.priority] || t.priority}
+          </span>
+        </td>
+        <td>
+          <span class="badge ${t.status === 'NEW' ? 'badge-info' : (t.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-success')}">
+            ${statusLabels[t.status] || t.status}
+          </span>
+        </td>
+        <td>${t.assigned_to_name || '-'}</td>
+        <td>
+          <span class="badge ${t.sla_info.badgeClass}">${t.sla_info.label}</span>
+        </td>
+        <td style="text-align: right;">
+          <button class="btn btn-secondary btn-sm" onclick="navigate('complaint-detail', ${t.id})">Tindak Lanjut</button>
+        </td>
+      </tr>
+    `).join('');
+
+    paginationDiv.innerHTML = `
+      <span style="font-size: 12px; color: #64748B;">Menampilkan ${(pag.page - 1) * pag.limit + 1} - ${Math.min(pag.page * pag.limit, pag.total)} dari ${pag.total} tiket</span>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn btn-secondary btn-sm" ${pag.page <= 1 ? 'disabled' : ''} onclick="changeComplaintPage(${pag.page - 1})">Sebelumnya</button>
+        <button class="btn btn-secondary btn-sm" ${pag.page >= pag.totalPages ? 'disabled' : ''} onclick="changeComplaintPage(${pag.page + 1})">Selanjutnya</button>
+      </div>
+    `;
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="color: #B91C1C;">Gagal memuat daftar keluhan.</div></td></tr>';
+  }
+}
+
+function changeComplaintPage(p) {
+  complaintSearchParams.page = p;
+  loadComplaintsData();
+}
+
+// Modal: Catat Keluhan Baru
+async function openCreateTicketModal(preSelectedCustomerId = null) {
+  try {
+    const custRes = await fetch('/api/customers?status=ACTIVE&limit=100');
+    const custData = await custRes.json();
+    const customers = custData.data || [];
+
+    const container = document.getElementById('modal-container');
+    container.innerHTML = `
+      <div class="modal-scrim" onclick="if(event.target === this) closeModal()">
+        <div class="modal-content" style="max-width: 560px;">
+          <div class="modal-header">
+            <h3>Catat Tiket Keluhan Baru</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+          </div>
+          <form onsubmit="handleCreateTicketSubmit(event)">
+            <div class="modal-body">
+              <div class="form-group">
+                <label class="form-label">Pilih Pelanggan Terdaftar *</label>
+                <select id="create-tck-customer" class="form-control" required>
+                  <option value="">-- Pilih Pelanggan --</option>
+                  ${customers.map(c => `
+                    <option value="${c.id}" ${preSelectedCustomerId == c.id ? 'selected' : ''}>
+                      ${c.name} (${c.customer_code} - +${c.phone})
+                    </option>
+                  `).join('')}
+                </select>
+                <div class="form-helper">Jika pelanggan baru, daftarkan pelanggan terlebih dahulu di menu Pelanggan.</div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                  <label class="form-label">Kategori Keluhan *</label>
+                  <select id="create-tck-category" class="form-control" required>
+                    <option value="FOOD_QUALITY">Kualitas Makanan</option>
+                    <option value="WRONG_ORDER">Pesanan Tidak Sesuai</option>
+                    <option value="DELIVERY_DELAY">Keterlambatan Pengiriman</option>
+                    <option value="SERVICE">Pelayanan Outlet</option>
+                    <option value="CLEANLINESS">Kebersihan</option>
+                    <option value="OTHER">Lainnya</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Tingkat Prioritas *</label>
+                  <select id="create-tck-priority" class="form-control" required>
+                    <option value="HIGH">Tinggi (Mendesak)</option>
+                    <option value="MEDIUM" selected>Sedang (Standar)</option>
+                    <option value="LOW">Rendah (Saran/Review)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Deskripsi Rinci Keluhan *</label>
+                <textarea id="create-tck-desc" class="form-control" placeholder="Jelaskan detail komplain dari pelanggan..." rows="3" required></textarea>
+              </div>
+
+              <div style="background: #FFFBEB; border: 1px solid #FDE68A; padding: 12px; border-radius: 6px; font-size: 12px; color: #92400E;">
+                <strong>Batas Waktu Respons (SLA):</strong> Target penanganan awal tiket adalah <strong>60 menit</strong> sejak tiket dibuat.
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
+              <button type="submit" class="btn btn-primary">Buat Tiket Keluhan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    showToast('Gagal membuka form keluhan.', 'error');
+  }
+}
+
+async function handleCreateTicketSubmit(e) {
+  e.preventDefault();
+  const customer_id = document.getElementById('create-tck-customer').value;
+  const category = document.getElementById('create-tck-category').value;
+  const priority = document.getElementById('create-tck-priority').value;
+  const description = document.getElementById('create-tck-desc').value;
+
+  try {
+    const res = await fetch('/api/complaints', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id, category, priority, description })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      closeModal();
+      if (currentRoute === 'complaints') loadComplaintsData();
+      if (currentRoute === 'dashboard') renderDashboard();
+      if (currentRoute === 'customer-detail') renderCustomerDetail(customer_id);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal membuat tiket.', 'error');
+  }
+}
+
+// -------------------------------------------------------------
+// 6. COMPLAINT DETAIL & STATUS UPDATE VIEW
+// -------------------------------------------------------------
+async function renderComplaintDetail(id) {
+  const content = document.getElementById('content-area');
+  content.innerHTML = '<div class="empty-state">Memuat detail tiket...</div>';
+
+  try {
+    const res = await fetch(`/api/complaints/${id}`);
+    const data = await res.json();
+    const t = data.data;
+
+    let activeAdmins = [];
+    try {
+      const uRes = await fetch('/api/admin/users');
+      if (uRes.ok) {
+        const uData = await uRes.json();
+        activeAdmins = (uData.data || []).filter(u => u.role === 'ADMIN' && u.is_active === 1);
+      }
+    } catch (e) {}
+
+    content.innerHTML = `
+      <div style="margin-bottom: 16px;">
+        <button class="btn btn-secondary btn-sm" onclick="navigate('complaints')">Kembali ke Daftar Tiket</button>
+      </div>
+
+      <div class="sla-alert-banner ${t.sla_info.code === 'OVERDUE' ? 'banner-danger' : ''}">
+        <div>
+          <strong style="${t.sla_info.code === 'OVERDUE' ? 'color: #991B1B;' : 'color: #92400E;'}">
+            Batas Waktu Respons: ${t.sla_info.label}
+          </strong>
+          <div style="font-size: 12px; color: #64748B; margin-top: 2px;">
+            Dibuat: ${formatDateIndo(t.created_at)} &bull; Batas Respons: ${formatDateIndo(t.sla_due_at)}
+            ${t.first_response_at ? `&bull; Respons Pertama: ${formatDateIndo(t.first_response_at)}` : ''}
+            ${t.resolved_at ? `&bull; Selesai: ${formatDateIndo(t.resolved_at)}` : ''}
+          </div>
+        </div>
+        <span class="badge ${t.sla_info.badgeClass}">${t.sla_info.label}</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+        <!-- Left: Detail Keluhan & Timeline -->
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Informasi Tiket ${t.ticket_code}</h2>
+                <p>Kategori: <strong>${categoryLabels[t.category] || t.category}</strong></p>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <span class="badge ${t.priority === 'HIGH' ? 'badge-danger' : (t.priority === 'MEDIUM' ? 'badge-warning' : 'badge-neutral')}">
+                  Prioritas ${priorityLabels[t.priority] || t.priority}
+                </span>
+                <span class="badge ${t.status === 'NEW' ? 'badge-info' : (t.status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-success')}">
+                  Status: ${statusLabels[t.status] || t.status}
+                </span>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+              <h4 style="font-size: 12px; font-weight: 600; color: #64748B; margin-bottom: 4px;">Uraian Keluhan</h4>
+              <p style="font-size: 14px; color: #1E293B; background: #F8FAFC; padding: 12px; border-radius: var(--radius-md); border: 1px solid #E2E8F0; line-height: 1.6;">
+                ${t.description}
+              </p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 14px; border-top: 1px solid #E2E8F0;">
+              <div>
+                <span style="font-size: 11px; color: #64748B;">Pelanggan:</span>
+                <div style="font-weight: 600; color: #0F172A;">${t.customer_name} (${t.customer_code})</div>
+                <div style="font-size: 12px; color: #15803D;">+${t.customer_phone}</div>
+              </div>
+              <div>
+                <span style="font-size: 11px; color: #64748B;">Penanggung Jawab (PIC):</span>
+                <div style="font-weight: 600; color: #0F172A;">${t.assigned_to_name || '-'}</div>
+                <div style="font-size: 12px; color: #64748B;">Dibuat oleh: ${t.created_by_name || '-'}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Riwayat Aktivitas & Tindak Lanjut</h2>
+            </div>
+
+            <div class="timeline" style="margin-bottom: 24px;">
+              ${t.activities && t.activities.length > 0 ? t.activities.map(a => `
+                <div class="timeline-item">
+                  <div class="timeline-header">
+                    <span>${a.user_name || 'Sistem'}</span>
+                    <span class="timeline-time">${formatDateIndo(a.created_at)}</span>
+                  </div>
+                  <div class="timeline-body">${a.description}</div>
+                </div>
+              `).join('') : '<div class="empty-state">Belum ada catatan aktivitas.</div>'}
+            </div>
+
+            ${t.status !== 'RESOLVED' ? `
+              <div style="padding-top: 16px; border-top: 1px solid #E2E8F0;">
+                <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Tambah Catatan Internal</h4>
+                <form onsubmit="handleAddNoteSubmit(event, ${t.id})">
+                  <textarea id="ticket-note-text" class="form-control" placeholder="Tuliskan catatan tindak lanjut..." rows="2" required></textarea>
+                  <div style="text-align: right; margin-top: 8px;">
+                    <button type="submit" class="btn btn-secondary btn-sm">Simpan Catatan</button>
+                  </div>
+                </form>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Right: Actions & Status Transition -->
+        <div>
+          <div class="card">
+            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Pembaruan Status Tiket</h3>
+
+            ${t.status === 'NEW' ? `
+              <div style="background: #F0F9FF; border: 1px solid #BAE6FD; padding: 12px; border-radius: 6px; font-size: 12px; color: #0369A1; margin-bottom: 12px;">
+                Tiket masih berstatus <strong>Baru</strong>. Klik tombol di bawah untuk memulai penanganan.
+              </div>
+              <button class="btn btn-primary" style="width: 100%; margin-bottom: 8px;" onclick="updateTicketStatus(${t.id}, 'IN_PROGRESS')">
+                Ubah ke Diproses
+              </button>
+            ` : (t.status === 'IN_PROGRESS' ? `
+              <div style="background: #FFFBEB; border: 1px solid #FDE68A; padding: 12px; border-radius: 6px; font-size: 12px; color: #92400E; margin-bottom: 12px;">
+                Tiket sedang <strong>Diproses</strong>. Setelah keluhan tertangani, ubah status menjadi Selesai.
+              </div>
+              <button class="btn btn-success" style="width: 100%; margin-bottom: 8px;" onclick="updateTicketStatus(${t.id}, 'RESOLVED')">
+                Tandai Selesai
+              </button>
+            ` : `
+              <div style="background: #F0FDF4; border: 1px solid #BBF7D0; padding: 12px; border-radius: 6px; font-size: 12px; color: #15803D;">
+                Tiket ini telah <strong>Selesai</strong>. Sesuai aturan sistem, tiket yang telah selesai tidak dapat dibuka kembali.
+              </div>
+            `)}
+
+            ${t.status !== 'RESOLVED' && activeAdmins.length > 0 ? `
+              <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #E2E8F0;">
+                <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Alihkan PIC Tiket</h4>
+                <select id="reassign-pic-select" class="form-control" style="margin-bottom: 8px;">
+                  ${activeAdmins.map(a => `
+                    <option value="${a.id}" ${t.assigned_to === a.id ? 'selected' : ''}>${a.name}</option>
+                  `).join('')}
+                </select>
+                <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="handleReassignPic(${t.id})">
+                  Ganti PIC
+                </button>
+              </div>
+            ` : ''}
+
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #E2E8F0;">
+              <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Komunikasi WhatsApp</h4>
+              <p style="font-size: 11px; color: #64748B; margin-bottom: 10px;">
+                Gunakan template balasan resmi untuk mengirim pesan langsung ke WhatsApp pelanggan.
+              </p>
+              <button class="btn btn-success btn-sm" style="width: 100%;" onclick="openWhatsAppWithTicket(${t.customer_id}, ${t.id})">
+                Buka Template WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = '<div class="empty-state" style="color: #B91C1C;">Gagal memuat detail keluhan.</div>';
+  }
+}
+
+async function updateTicketStatus(id, newStatus) {
+  const note = prompt(`Masukkan catatan perubahan status (${newStatus === 'IN_PROGRESS' ? 'Diproses' : 'Selesai'}):`, '');
+  try {
+    const res = await fetch(`/api/complaints/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus, note: note || '' })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      renderComplaintDetail(id);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal mengubah status tiket.', 'error');
+  }
+}
+
+async function handleReassignPic(id) {
+  const select = document.getElementById('reassign-pic-select');
+  const assigned_to = select.value;
+  const note = prompt('Alasan pergantian PIC:', 'Pengalihan tugas staf operasional');
+
+  try {
+    const res = await fetch(`/api/complaints/${id}/assign`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assigned_to, note: note || '' })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      renderComplaintDetail(id);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal mengalihkan PIC.', 'error');
+  }
+}
+
+async function handleAddNoteSubmit(e, id) {
+  e.preventDefault();
+  const text = document.getElementById('ticket-note-text').value;
+
+  try {
+    const res = await fetch(`/api/complaints/${id}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: text })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      renderComplaintDetail(id);
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal menyimpan catatan.', 'error');
+  }
+}
+
+function openWhatsAppWithTicket(customerId, ticketId) {
+  navigate('whatsapp');
+  setTimeout(() => {
+    loadWhatsAppStudio(customerId, ticketId);
+  }, 100);
+}
+
+// -------------------------------------------------------------
+// 7. WHATSAPP TEMPLATES STUDIO VIEW
+// -------------------------------------------------------------
+async function renderWhatsApp() {
+  const content = document.getElementById('content-area');
+  content.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <!-- Kiri: Pilihan Template & Pengikatan Data -->
+      <div class="card">
+        <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px;">Pilihan Template Standar</h3>
+        <p style="font-size: 12px; color: #64748B; margin-bottom: 16px;">
+          Pilih salah satu dari 4 template pesan baku Bro Chicken.
+        </p>
+
+        <div id="template-list-container" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+          <!-- Diisi via JS -->
+        </div>
+
+        <div style="padding-top: 16px; border-top: 1px solid #E2E8F0;">
+          <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Kaitkan Pelanggan</h4>
+          <div class="form-group">
+            <select id="wa-customer-select" class="form-control" onchange="handleWaBindingChange()">
+              <option value="">-- Pilih Pelanggan --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nomor Tiket Terkait (Opsional)</label>
+            <input type="text" id="wa-ticket-input" class="form-control" placeholder="Contoh: TCK-2026-0045" oninput="handleWaBindingChange()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Kanan: Pratinjau & Aksi Pengiriman -->
+      <div class="card">
+        <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px;">Pratinjau Pesan yang Akan Dikirim</h3>
+        <div class="form-group">
+          <label class="form-label">Teks Pesan (Dapat Diubah Sementara)</label>
+          <textarea id="wa-preview-text" class="form-control" rows="8" style="line-height: 1.6;"></textarea>
+          <div class="form-helper">Perubahan teks hanya berlaku untuk pengiriman saat ini dan tidak mengubah template master.</div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 16px;">
+          <button class="btn btn-secondary" onclick="copyWaText()">Salin Pesan</button>
+          <button class="btn btn-success" style="flex: 1;" onclick="openWhatsAppDirect()">Buka WhatsApp Web</button>
+        </div>
+
+        <div style="margin-top: 20px; padding: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 11px; color: #64748B;">
+          <strong>Pemberitahuan Operasional:</strong> Pengiriman pesan dilakukan manual oleh staf operasional melalui WhatsApp Web atau aplikasi WhatsApp desktop. Sistem tidak terhubung ke bot atau API pihak ketiga otomatis.
+        </div>
+      </div>
+    </div>
+  `;
+
+  loadWhatsAppStudio();
+}
+
+let loadedTemplates = [];
+let selectedTemplateId = 'COMPLAINT_RECEIVED';
+
+async function loadWhatsAppStudio(preCustomerId = null, preTicketId = null) {
+  try {
+    const res = await fetch('/api/templates');
+    const json = await res.json();
+    loadedTemplates = json.data;
+
+    const listDiv = document.getElementById('template-list-container');
+    listDiv.innerHTML = loadedTemplates.map(t => `
+      <div onclick="selectWaTemplate('${t.id}')" style="padding: 12px; border: 1px solid ${selectedTemplateId === t.id ? 'var(--primary)' : '#E2E8F0'}; background: ${selectedTemplateId === t.id ? '#FFF7ED' : '#FFFFFF'}; border-radius: var(--radius-md); cursor: pointer; transition: all 0.15s ease;">
+        <div style="font-weight: 600; font-size: 13px; color: #0F172A; display: flex; justify-content: space-between;">
+          <span>${t.title}</span>
+          <span class="badge badge-neutral">${t.category}</span>
+        </div>
+        <div style="font-size: 11px; color: #64748B; margin-top: 4px;">${t.description}</div>
+      </div>
+    `).join('');
+
+    // Load customers
+    const custRes = await fetch('/api/customers?limit=100');
+    const custData = await custRes.json();
+    const custSelect = document.getElementById('wa-customer-select');
+    custSelect.innerHTML = '<option value="">-- Pilih Pelanggan --</option>' + (custData.data || []).map(c => `
+      <option value="${c.id}" data-name="${c.name}" data-phone="${c.phone}" ${preCustomerId == c.id ? 'selected' : ''}>
+        ${c.name} (+${c.phone})
+      </option>
+    `).join('');
+
+    if (preTicketId) {
+      document.getElementById('wa-ticket-input').value = `TCK-2026-00${preTicketId}`;
+    }
+
+    updateWaPreview();
+  } catch (err) {
+    showToast('Gagal memuat template WhatsApp.', 'error');
+  }
+}
+
+function selectWaTemplate(id) {
+  selectedTemplateId = id;
+  const listDiv = document.getElementById('template-list-container');
+  listDiv.querySelectorAll('div[onclick]').forEach(el => {
+    el.style.borderColor = '#E2E8F0';
+    el.style.background = '#FFFFFF';
+  });
+  updateWaPreview();
+}
+
+function handleWaBindingChange() {
+  updateWaPreview();
+}
+
+function updateWaPreview() {
+  const current = loadedTemplates.find(t => t.id === selectedTemplateId) || loadedTemplates[0];
+  if (!current) return;
+
+  const select = document.getElementById('wa-customer-select');
+  const selectedOpt = select ? select.options[select.selectedIndex] : null;
+  const nameVal = selectedOpt && selectedOpt.value ? selectedOpt.dataset.name : '{nama}';
+  const ticketInput = document.getElementById('wa-ticket-input');
+  const ticketVal = ticketInput && ticketInput.value.trim() ? ticketInput.value.trim() : '{ticket_id}';
+
+  let text = current.template;
+  text = text.replace(/\{nama\}/g, nameVal);
+  text = text.replace(/\{ticket_id\}/g, ticketVal);
+  text = text.replace(/\{nama_bisnis\}/g, 'Bro Chicken');
+
+  const previewBox = document.getElementById('wa-preview-text');
+  if (previewBox) previewBox.value = text;
+}
+
+function copyWaText() {
+  const text = document.getElementById('wa-preview-text').value;
+  navigator.clipboard.writeText(text);
+  showToast('Teks pesan berhasil disalin ke clipboard!');
+}
+
+function openWhatsAppDirect() {
+  const select = document.getElementById('wa-customer-select');
+  const selectedOpt = select ? select.options[select.selectedIndex] : null;
+  const phone = selectedOpt && selectedOpt.value ? selectedOpt.dataset.phone : '';
+  const text = encodeURIComponent(document.getElementById('wa-preview-text').value);
+
+  if (phone) {
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+  } else {
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  }
+}
+
+// -------------------------------------------------------------
+// 8. REPORTS VIEW
+// -------------------------------------------------------------
+async function renderReports() {
+  const content = document.getElementById('content-area');
+  content.innerHTML = '<div class="empty-state">Memuat data laporan...</div>';
+
+  try {
+    const res = await fetch('/api/reports?period=this_month');
+    const json = await res.json();
+    const d = json.data;
+    const s = d.summary;
+
+    content.innerHTML = `
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <label style="font-size: 13px; font-weight: 600; color: #334155;">Rentang Periode:</label>
+          <select class="form-control" style="width: 180px;" onchange="loadReportPeriod(this.value)">
+            <option value="this_month" selected>Bulan Ini</option>
+            <option value="today">Hari Ini</option>
+            <option value="7days">7 Hari Terakhir</option>
+            <option value="30days">30 Hari Terakhir</option>
+          </select>
+        </div>
+        <div class="toolbar-right">
+          <a href="/api/reports/export-csv?period=this_month" class="btn btn-secondary" id="export-csv-btn">
+            Unduh Laporan (CSV)
+          </a>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-card-title">Pelanggan Baru</div>
+          <div class="stat-card-value">${s.new_customers}</div>
+          <div class="stat-card-sub">Dalam periode laporan</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">Total Keluhan Masuk</div>
+          <div class="stat-card-value">${s.total_complaints}</div>
+          <div class="stat-card-sub">${s.status_counts.RESOLVED} Selesai &bull; ${s.status_counts.IN_PROGRESS} Diproses</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">Rata-rata Respons Awal</div>
+          <div class="stat-card-value">${s.avg_response_minutes} <span style="font-size: 14px; font-weight: 500;">menit</span></div>
+          <div class="stat-card-sub">Target SLA: maksimal 60 menit</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">Tingkat Kepatuhan SLA</div>
+          <div class="stat-card-value" style="color: #15803D;">${s.sla_compliance_rate}%</div>
+          <div class="stat-card-sub">${s.overdue_complaints} tiket melewati batas SLA</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div class="card">
+          <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 16px;">Distribusi Kategori Keluhan</h3>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${Object.entries(d.category_distribution).map(([cat, count]) => {
+              const pct = s.total_complaints > 0 ? Math.round((count / s.total_complaints) * 100) : 0;
+              return `
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+                    <span style="font-weight: 500;">${categoryLabels[cat] || cat}</span>
+                    <span style="color: #64748B;">${count} tiket (${pct}%)</span>
+                  </div>
+                  <div style="width: 100%; height: 8px; background: #E2E8F0; border-radius: 4px; overflow: hidden;">
+                    <div style="width: ${pct}%; height: 100%; background: var(--primary); border-radius: 4px;"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 16px;">Kinerja Staf PIC Admin</h3>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nama Staf</th>
+                  <th>Tiket Ditangani</th>
+                  <th>Tepat Waktu</th>
+                  <th>Terlambat</th>
+                  <th>Kepatuhan SLA</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${d.pic_performance.map(p => `
+                  <tr>
+                    <td><strong>${p.name}</strong></td>
+                    <td>${p.total_tickets}</td>
+                    <td style="color: #15803D;">${p.on_time}</td>
+                    <td style="color: #B91C1C;">${p.overdue}</td>
+                    <td><span class="badge ${p.compliance_rate >= 90 ? 'badge-success' : 'badge-warning'}">${p.compliance_rate}%</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = '<div class="empty-state" style="color: #B91C1C;">Gagal memuat laporan.</div>';
+  }
+}
+
+function loadReportPeriod(val) {
+  renderReports();
+}
+
+// -------------------------------------------------------------
+// 9. ADMIN MANAGEMENT VIEW (OWNER ONLY)
+// -------------------------------------------------------------
+async function renderAdmin() {
+  if (currentUser.role !== 'OWNER') {
+    document.getElementById('content-area').innerHTML = '<div class="empty-state" style="color: #B91C1C;">Akses khusus Pemilik (Owner).</div>';
+    return;
+  }
+
+  const content = document.getElementById('content-area');
+  content.innerHTML = `
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <p style="font-size: 13px; color: #64748B;">Kelola hak akses dan akun operasional staf admin Bro Chicken.</p>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-primary" onclick="openAddAdminModal()">+ Tambah Akun Admin</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <div class="table-container" style="border: none;">
+        <table>
+          <thead>
+            <tr>
+              <th>Nama Pengguna</th>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Status Akun</th>
+              <th>Tiket Berjalan</th>
+              <th>Terdaftar</th>
+              <th style="text-align: right;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="admin-tbody">
+            <tr><td colspan="7"><div class="empty-state">Memuat data akun...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  loadAdminUsers();
+}
+
+async function loadAdminUsers() {
+  const tbody = document.getElementById('admin-tbody');
+  try {
+    const res = await fetch('/api/admin/users');
+    const json = await res.json();
+    const users = json.data;
+
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td><strong>${u.name}</strong></td>
+        <td><code>${u.username}</code></td>
+        <td>
+          <span class="badge ${u.role === 'OWNER' ? 'badge-gold' : 'badge-info'}">
+            ${u.role === 'OWNER' ? 'Pemilik (Owner)' : 'Staf Admin'}
+          </span>
+        </td>
+        <td>
+          <span class="badge ${u.is_active === 1 ? 'badge-success' : 'badge-danger'}">
+            ${u.is_active === 1 ? 'Aktif' : 'Nonaktif'}
+          </span>
+        </td>
+        <td>${u.active_tickets_count} tiket aktif</td>
+        <td>${formatDateIndo(u.created_at)}</td>
+        <td style="text-align: right;">
+          ${u.role !== 'OWNER' ? `
+            <button class="btn btn-secondary btn-sm" onclick="openResetPasswordModal(${u.id}, '${u.name}')">Reset Sandi</button>
+            ${u.is_active === 1
+              ? `<button class="btn btn-secondary btn-sm" style="color: #B91C1C;" onclick="toggleAdminStatus(${u.id}, 0)">Nonaktifkan</button>`
+              : `<button class="btn btn-secondary btn-sm" style="color: #15803D;" onclick="toggleAdminStatus(${u.id}, 1)">Aktifkan</button>`
+            }
+          ` : '<span style="font-size: 11px; color: #64748B;">Akun Utama</span>'}
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="color: #B91C1C;">Gagal memuat daftar admin.</div></td></tr>';
+  }
+}
+
+function openAddAdminModal() {
+  const container = document.getElementById('modal-container');
+  container.innerHTML = `
+    <div class="modal-scrim" onclick="if(event.target === this) closeModal()">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Tambah Akun Staf Admin</h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form onsubmit="handleAddAdminSubmit(event)">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Nama Lengkap *</label>
+              <input type="text" id="add-admin-name" class="form-control" placeholder="Contoh: Doni Pratama" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Username Login *</label>
+              <input type="text" id="add-admin-username" class="form-control" placeholder="Contoh: doni_pratama" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Kata Sandi Awal *</label>
+              <input type="password" id="add-admin-password" class="form-control" placeholder="Minimal 6 karakter" required>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
+            <button type="submit" class="btn btn-primary">Buat Akun</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+async function handleAddAdminSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('add-admin-name').value;
+  const username = document.getElementById('add-admin-username').value;
+  const password = document.getElementById('add-admin-password').value;
+
+  try {
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, username, password })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      closeModal();
+      loadAdminUsers();
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal membuat akun admin.', 'error');
+  }
+}
+
+async function toggleAdminStatus(id, newStatus) {
+  try {
+    const res = await fetch(`/api/admin/users/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: newStatus })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      loadAdminUsers();
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal memperbarui status akun.', 'error');
+  }
+}
+
+function openResetPasswordModal(id, name) {
+  const newPass = prompt(`Masukkan kata sandi baru untuk ${name} (minimal 6 karakter):`);
+  if (!newPass) return;
+
+  fetch(`/api/admin/users/${id}/reset-password`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_password: newPass })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) showToast(data.message);
+    else showToast(data.error, 'error');
+  });
+}
+
+// -------------------------------------------------------------
+// 10. SETTINGS VIEW (OWNER ONLY)
+// -------------------------------------------------------------
+async function renderSettings() {
+  if (currentUser.role !== 'OWNER') {
+    document.getElementById('content-area').innerHTML = '<div class="empty-state" style="color: #B91C1C;">Akses khusus Pemilik (Owner).</div>';
+    return;
+  }
+
+  const content = document.getElementById('content-area');
+  content.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <!-- Profil Outlet -->
+      <div class="card">
+        <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px;">Profil Outlet & Kebijakan SLA</h3>
+        <div class="form-group">
+          <label class="form-label">Nama Outlet</label>
+          <input type="text" class="form-control" value="Bro Chicken - Cabang Margonda" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nomor Hotline Layanan</label>
+          <input type="text" class="form-control" value="0812-9988-7766" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Batas Respons (SLA)</label>
+          <input type="text" class="form-control" value="60 Menit Kalender (Baku Sesuai SOP)" readonly>
+          <div class="form-helper">Waktu respons dihitung 60 menit sejak tiket dibuat dan tidak dapat diubah (FR-08.12).</div>
+        </div>
+      </div>
+
+      <!-- Backup Database SQLite -->
+      <div class="card">
+        <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px;">Pencadangan Database SQLite</h3>
+        <p style="font-size: 12px; color: #64748B; margin-bottom: 16px;">
+          Unduh salinan mentah file database <code>brochicken_crm.sqlite</code> langsung ke komputer lokal Anda untuk arsip cadangan (NFR-12).
+        </p>
+
+        <a href="/api/settings/backup" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+          Unduh Salinan Database SQLite (.sqlite)
+        </a>
+
+        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #E2E8F0;">
+          <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Ubah Kata Sandi Pemilik</h4>
+          <form onsubmit="handleChangeOwnerPassword(event)">
+            <div class="form-group">
+              <label class="form-label">Kata Sandi Saat Ini</label>
+              <input type="password" id="owner-curr-pass" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Kata Sandi Baru</label>
+              <input type="password" id="owner-new-pass" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-secondary btn-sm">Perbarui Kata Sandi</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function handleChangeOwnerPassword(e) {
+  e.preventDefault();
+  const current_password = document.getElementById('owner-curr-pass').value;
+  const new_password = document.getElementById('owner-new-pass').value;
+
+  try {
+    const res = await fetch('/api/settings/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password, new_password })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message);
+      document.getElementById('owner-curr-pass').value = '';
+      document.getElementById('owner-new-pass').value = '';
+    } else {
+      showToast(data.error, 'error');
+    }
+  } catch (err) {
+    showToast('Gagal memperbarui kata sandi.', 'error');
+  }
+}
+
+// -------------------------------------------------------------
+// APP INIT
+// -------------------------------------------------------------
+async function initApp() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        currentUser = data.user;
+        renderShell();
+        navigate('dashboard');
+        return;
+      }
+    }
+  } catch (e) {}
+
+  renderLogin();
+}
+
+window.addEventListener('DOMContentLoaded', initApp);
