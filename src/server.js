@@ -1,7 +1,15 @@
+const path = require('node:path');
+try {
+  if (typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile(path.resolve(__dirname, '../.env'));
+  }
+} catch (e) {
+  // .env file opsional jika env sudah diset dari sistem
+}
+
 const express = require('express');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
-const path = require('node:path');
 const { getDb } = require('./db/database');
 const { seedDatabase } = require('./db/seed');
 
@@ -13,6 +21,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const reportRoutes = require('./routes/reports');
 const adminRoutes = require('./routes/admin');
 const settingsRoutes = require('./routes/settings');
+const simulationRoutes = require('./routes/simulation');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +60,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/simulation', simulationRoutes);
 
 // Fallback to index.html for SPA routes
 app.get('*', (req, res) => {

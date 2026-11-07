@@ -86,6 +86,10 @@ function renderShell() {
         <a href="#whatsapp" class="${currentRoute === 'whatsapp' ? 'active' : ''}" onclick="navigate('whatsapp')">
           <span>Template WhatsApp</span>
         </a>
+        <a href="#simulation" class="${currentRoute === 'simulation' ? 'active' : ''}" onclick="navigate('simulation')">
+          <span>Simulasi WA (AI)</span>
+          <span class="badge badge-warning" style="font-size: 10px; padding: 2px 6px; margin-left: auto;">AI Demo</span>
+        </a>
         <a href="#reports" class="${currentRoute === 'reports' ? 'active' : ''}" onclick="navigate('reports')">
           <span>Laporan & SLA</span>
         </a>
@@ -151,6 +155,9 @@ function navigate(route, id = null) {
   } else if (route === 'whatsapp') {
     document.getElementById('page-title').innerText = 'Studio Pesan WhatsApp';
     renderWhatsApp();
+  } else if (route === 'simulation') {
+    document.getElementById('page-title').innerText = 'Simulasi WhatsApp & AI Triage (Human-in-the-Loop)';
+    renderSimulation();
   } else if (route === 'reports') {
     document.getElementById('page-title').innerText = 'Laporan Kinerja & Kepatuhan SLA';
     renderReports();
@@ -1877,6 +1884,380 @@ async function handleChangeOwnerPassword(e) {
   } catch (err) {
     showToast('Gagal memperbarui kata sandi.', 'error');
   }
+}
+
+// -------------------------------------------------------------
+// SIMULASI WHATSAPP & AI TRIAGE (HUMAN-IN-THE-LOOP)
+// -------------------------------------------------------------
+let simMessages = [
+  {
+    sender: 'ai',
+    text: 'Halo! Selamat datang di Layanan Pelanggan WhatsApp Bro Chicken. Silakan ketik keluhan pesanan atau pertanyaan Anda di sini. AI Triage kami akan menganalisis dan mendaftarkan tiket ke antrean operasional CRM.',
+    time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+  }
+];
+let simSamples = [];
+let lastSimAnalysis = null;
+let lastSimTicket = null;
+let lastSimCustomer = null;
+let isSimLoading = false;
+
+function renderSimChatBubbles() {
+  let html = simMessages.map(msg => {
+    const isCust = msg.sender === 'cust';
+    return `
+      <div class="wa-bubble ${isCust ? 'wa-bubble-cust' : 'wa-bubble-ai'}">
+        <div class="wa-bubble-sender">${isCust ? (msg.name || 'Pelanggan') : 'Bro Chicken Assistant (AI)'}</div>
+        <div>${msg.text}</div>
+        <div class="wa-time">
+          <span>${msg.time}</span>
+          ${isCust ? '<span style="color: #38BDF8;">&check;&check;</span>' : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (isSimLoading) {
+    html += `
+      <div class="typing-indicator">
+        <span>AI sedang menganalisis pesan & mendaftarkan tiket CRM...</span>
+      </div>
+    `;
+  }
+
+  return html;
+}
+
+function renderSimInspectorContent() {
+  if (!lastSimAnalysis) {
+    return `
+      <div style="padding: 16px 0; text-align: center; color: var(--text-muted); font-size: 12.5px;">
+        Belum ada pesan yang dianalisis.<br>
+        Silakan klik salah satu <strong>Skenario Contoh</strong> di atas atau ketik keluhan pelanggan di layar WhatsApp.
+      </div>
+    `;
+  }
+
+  const isComplaint = lastSimAnalysis.is_complaint;
+  const catLabel = categoryLabels[lastSimAnalysis.category] || lastSimAnalysis.category;
+  const prioLabel = priorityLabels[lastSimAnalysis.priority] || lastSimAnalysis.priority;
+
+  const prioBadgeClass = lastSimAnalysis.priority === 'HIGH' ? 'badge-danger' : (lastSimAnalysis.priority === 'MEDIUM' ? 'badge-warning' : 'badge-info');
+
+  return `
+    <div class="inspector-row">
+      <span class="inspector-label">Tipe Pesan</span>
+      <span class="inspector-value">
+        <span class="badge ${isComplaint ? 'badge-danger' : 'badge-success'}">
+          ${isComplaint ? 'KELUHAN RESMI (Tiket Dibuat)' : 'PERTANYAAN / SAPAAN UMUM'}
+        </span>
+      </span>
+    </div>
+    <div class="inspector-row">
+      <span class="inspector-label">Kategori Masalah</span>
+      <span class="inspector-value"><strong>${catLabel}</strong></span>
+    </div>
+    <div class="inspector-row">
+      <span class="inspector-label">Tingkat Prioritas</span>
+      <span class="inspector-value"><span class="badge ${prioBadgeClass}">${prioLabel}</span></span>
+    </div>
+    <div class="inspector-row">
+      <span class="inspector-label">Sentimen Pelanggan</span>
+      <span class="inspector-value">
+        <span class="badge ${lastSimAnalysis.sentiment === 'NEGATIVE' ? 'badge-danger' : (lastSimAnalysis.sentiment === 'POSITIVE' ? 'badge-success' : 'badge-neutral')}">
+          ${lastSimAnalysis.sentiment}
+        </span>
+      </span>
+    </div>
+    <div class="inspector-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+      <span class="inspector-label">Ringkasan Masalah yang Diekstrak AI:</span>
+      <span class="inspector-value" style="text-align: left; font-weight: 500; color: #1E293B; background: #F8FAFC; padding: 6px 10px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0;">
+        ${lastSimAnalysis.extracted_problem || '-'}
+      </span>
+    </div>
+  `;
+}
+
+function renderSimTicketContent() {
+  if (!lastSimTicket) {
+    return `
+      <div style="padding: 14px 0; text-align: center; color: var(--text-muted); font-size: 12.5px;">
+        Tiket belum dibuat. Kirim pesan yang berisi komplain agar AI otomatis men-generate tiket keluhan.
+      </div>
+    `;
+  }
+
+  return `
+    <div class="ticket-sync-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-weight: 700; font-size: 14px; color: var(--primary);">
+          #${lastSimTicket.ticket_code}
+        </span>
+        <span class="badge badge-info">Status: Baru</span>
+      </div>
+      <div style="font-size: 12px; color: var(--text-body); margin-bottom: 4px;">
+        <strong>Pelanggan:</strong> ${lastSimCustomer ? lastSimCustomer.name : 'Pelanggan'} (${lastSimCustomer ? lastSimCustomer.customer_code : '-'})
+      </div>
+      <div style="font-size: 12px; color: var(--text-body); margin-bottom: 4px;">
+        <strong>Batas Respons (SLA):</strong> 60 Menit Waktu Kalender
+      </div>
+      <div style="font-size: 12px; color: var(--text-body); margin-bottom: 8px;">
+        <strong>PIC Ditugaskan:</strong> ${lastSimTicket.assigned_to_name || 'Admin'}
+      </div>
+      <button class="btn btn-primary" style="width: 100%; font-size: 12.5px; padding: 8px; font-weight: 600;" onclick="navigate('complaint-detail', ${lastSimTicket.id})">
+        Buka & Tindak Lanjuti di CRM (Human-in-the-Loop) &rarr;
+      </button>
+    </div>
+  `;
+}
+
+function scrollSimChatToBottom() {
+  setTimeout(() => {
+    const el = document.getElementById('sim-chat-body');
+    if (el) el.scrollTop = el.scrollHeight;
+  }, 50);
+}
+
+function applySimulationSample(idx) {
+  const sample = simSamples[idx];
+  if (!sample) return;
+
+  document.getElementById('sim-name').value = sample.name;
+  document.getElementById('sim-phone').value = sample.phone;
+  document.getElementById('sim-source').value = sample.source;
+  document.getElementById('sim-chat-input').value = sample.message;
+  document.getElementById('sim-chat-input').focus();
+}
+
+async function handleSimSend() {
+  if (isSimLoading) return;
+
+  const inputEl = document.getElementById('sim-chat-input');
+  const message = inputEl.value.trim();
+  if (!message) return;
+
+  const name = document.getElementById('sim-name').value.trim() || 'Pelanggan';
+  const phone = document.getElementById('sim-phone').value.trim() || '081299887711';
+  const source = document.getElementById('sim-source').value;
+
+  const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+  // Tambahkan chat pelanggan ke riwayat
+  simMessages.push({
+    sender: 'cust',
+    name: name,
+    text: message,
+    time: nowTime
+  });
+
+  inputEl.value = '';
+  isSimLoading = true;
+
+  const chatBody = document.getElementById('sim-chat-body');
+  if (chatBody) {
+    chatBody.innerHTML = renderSimChatBubbles();
+    scrollSimChatToBottom();
+  }
+
+  try {
+    const res = await fetch('/api/simulation/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone, source, message })
+    });
+
+    const data = await res.json();
+    isSimLoading = false;
+
+    if (data.success) {
+      lastSimAnalysis = data.analysis;
+      lastSimCustomer = data.customer;
+      lastSimTicket = data.ticket;
+
+      // Tambahkan respon AI ke chat
+      simMessages.push({
+        sender: 'ai',
+        text: data.reply,
+        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      });
+
+      if (data.ticket) {
+        showToast(`Tiket #${data.ticket.ticket_code} berhasil dibuat oleh AI Triage!`);
+      } else {
+        showToast('Pesan direspons oleh AI Assistant.');
+      }
+    } else {
+      showToast(data.error || 'Gagal memproses simulasi.', 'error');
+    }
+  } catch (err) {
+    isSimLoading = false;
+    showToast('Terjadi kendala koneksi ke server simulasi.', 'error');
+  }
+
+  // Render ulang komponen
+  const updatedChatBody = document.getElementById('sim-chat-body');
+  if (updatedChatBody) {
+    updatedChatBody.innerHTML = renderSimChatBubbles();
+    scrollSimChatToBottom();
+  }
+
+  const inspectorEl = document.getElementById('sim-inspector-content');
+  if (inspectorEl) {
+    inspectorEl.innerHTML = renderSimInspectorContent();
+  }
+
+  const engineBadgeEl = document.getElementById('sim-engine-badge');
+  if (engineBadgeEl && lastSimAnalysis) {
+    engineBadgeEl.innerText = lastSimAnalysis.engine;
+  }
+
+  const ticketContentEl = document.getElementById('sim-ticket-content');
+  if (ticketContentEl) {
+    ticketContentEl.innerHTML = renderSimTicketContent();
+  }
+
+  const ticketBadgeEl = document.getElementById('sim-ticket-badge');
+  if (ticketBadgeEl && lastSimTicket) {
+    ticketBadgeEl.innerText = `Terdaftar #${lastSimTicket.ticket_code}`;
+  }
+}
+
+async function renderSimulation() {
+  const container = document.getElementById('content-area');
+
+  if (simSamples.length === 0) {
+    try {
+      const res = await fetch('/api/simulation/samples');
+      const data = await res.json();
+      if (data.success) {
+        simSamples = data.data;
+      }
+    } catch (e) {}
+  }
+
+  container.innerHTML = `
+    <div style="margin-bottom: 16px;">
+      <p style="color: var(--text-muted); font-size: 13px;">
+        Simulasi chat interaktif WhatsApp untuk menguji integrasi <strong>AI Triage (Gemini 3.5 Flash Lite)</strong> yang secara otomatis mendeteksi keluhan pelanggan, membuat tiket resmi di database CRM, dan menyalakan timer SLA 60 menit dengan tetap mempertahankan kendali verifikasi staf manusia (<em>Human-in-the-Loop</em>).
+      </p>
+    </div>
+
+    <!-- Quick Scenario Presets -->
+    <div style="margin-bottom: 16px;">
+      <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em;">
+        PILIH SKENARIO SIMULASI CEPAT:
+      </div>
+      <div class="preset-chips-container" id="sim-preset-chips">
+        ${simSamples.map((s, idx) => `
+          <button class="preset-chip" onclick="applySimulationSample(${idx})">
+            <span>${s.title}</span> &bull; <span class="badge ${s.badgeClass}" style="font-size: 9.5px; padding: 1px 5px;">${s.badge}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="simulation-grid">
+      <!-- Kolom Kiri: Layar Mockup WhatsApp -->
+      <div class="wa-phone-mockup">
+        <div class="wa-header">
+          <div class="wa-header-left">
+            <img src="/images/logo.png" alt="Bro Chicken Logo" class="wa-avatar">
+            <div>
+              <div class="wa-name">Bro Chicken Customer Care</div>
+              <div class="wa-status">
+                <span class="wa-status-dot"></span>
+                <span>Online &bull; Respon Cepat (SLA 60 Mnt)</span>
+              </div>
+            </div>
+          </div>
+          <span class="badge badge-success" style="font-size: 10.5px; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3);">
+            Official WhatsApp
+          </span>
+        </div>
+
+        <div class="wa-profile-bar">
+          <div class="wa-profile-field">
+            <label>Nama Pelanggan</label>
+            <input type="text" id="sim-name" value="Rian Pratama">
+          </div>
+          <div class="wa-profile-field">
+            <label>Nomor WhatsApp</label>
+            <input type="text" id="sim-phone" value="081299887711">
+          </div>
+          <div class="wa-profile-field">
+            <label>Kanal Pembelian</label>
+            <select id="sim-source">
+              <option value="GOFOOD">GoFood</option>
+              <option value="GRABFOOD">GrabFood</option>
+              <option value="DIRECT">Beli Langsung</option>
+              <option value="OTHER">Lainnya</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="wa-chat-body" id="sim-chat-body">
+          ${renderSimChatBubbles()}
+        </div>
+
+        <div class="wa-input-bar">
+          <input type="text" id="sim-chat-input" placeholder="Ketik pesan keluhan atau pertanyaan pelanggan..." onkeydown="if(event.key === 'Enter') handleSimSend()">
+          <button class="wa-btn-send" onclick="handleSimSend()" id="sim-btn-send">
+            Kirim
+          </button>
+        </div>
+      </div>
+
+      <!-- Kolom Kanan: Live CRM Inspector & Human-in-the-Loop Console -->
+      <div>
+        <!-- AI Inspector Card -->
+        <div class="inspector-card">
+          <div class="inspector-header">
+            <div class="inspector-title">
+              <span>Analisis AI Triage Real-Time</span>
+            </div>
+            <span class="badge badge-warning" id="sim-engine-badge">
+              ${lastSimAnalysis ? lastSimAnalysis.engine : 'Gemini 3.5 Flash Lite'}
+            </span>
+          </div>
+
+          <div id="sim-inspector-content">
+            ${renderSimInspectorContent()}
+          </div>
+        </div>
+
+        <!-- Live CRM Ticket Card -->
+        <div class="inspector-card" style="border-left: 4px solid var(--primary);">
+          <div class="inspector-header">
+            <div class="inspector-title">
+              <span>Tiket CRM Bro Chicken</span>
+            </div>
+            <span class="badge badge-info" id="sim-ticket-badge">
+              ${lastSimTicket ? 'Terhubung Otomatis' : 'Menunggu Input'}
+            </span>
+          </div>
+
+          <div id="sim-ticket-content">
+            ${renderSimTicketContent()}
+          </div>
+        </div>
+
+        <!-- Architecture Explainer Card -->
+        <div class="card" style="background: #F8FAFC; border: 1px dashed var(--card-border);">
+          <div style="font-weight: 700; font-size: 13px; color: var(--text-main); margin-bottom: 8px;">
+            Alur Human-in-the-Loop (SOP Bro Chicken):
+          </div>
+          <ol style="padding-left: 18px; font-size: 12px; color: var(--text-body); line-height: 1.6;">
+            <li><strong>Chat Pelanggan:</strong> Pembeli menyampaikan keluhan melalui kanal WhatsApp resmi.</li>
+            <li><strong>AI Triage:</strong> LLM mengekstrak ringkasan masalah, kategori, prioritas, dan auto-reply awal.</li>
+            <li><strong>Auto Ticket Generation:</strong> Tiket keluhan resmi langsung dibuat di SQLite dengan timer SLA 60 menit.</li>
+            <li><strong>Human Override (Admin):</strong> Staf Admin memeriksa dapur/driver, menyelesaikan komplain, dan menutup tiket.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  `;
+
+  scrollSimChatToBottom();
 }
 
 // -------------------------------------------------------------
