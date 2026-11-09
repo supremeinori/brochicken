@@ -100,6 +100,10 @@ function renderShell() {
           <span>Simulasi WA (AI)</span>
           <span class="badge badge-warning" style="font-size: 10px; padding: 2px 6px; margin-left: auto;">AI Demo</span>
         </a>
+        <a href="#membership" class="${currentRoute === 'membership' ? 'active' : ''}" onclick="navigate('membership')">
+          <span>Member &amp; Promo</span>
+          <span class="badge badge-success" style="font-size: 10px; padding: 2px 6px; margin-left: auto;">Baru</span>
+        </a>
         <a href="#reports" class="${currentRoute === 'reports' ? 'active' : ''}" onclick="navigate('reports')">
           <span>Laporan & SLA</span>
         </a>
@@ -168,6 +172,9 @@ function navigate(route, id = null) {
   } else if (route === 'simulation') {
     document.getElementById('page-title').innerText = 'Simulasi WhatsApp & AI Triage (Human-in-the-Loop)';
     renderSimulation();
+  } else if (route === 'membership') {
+    document.getElementById('page-title').innerText = 'Membership, QR Promo & Kupon Tanggal Tua';
+    renderMembership();
   } else if (route === 'reports') {
     document.getElementById('page-title').innerText = 'Laporan Kinerja & Kepatuhan SLA';
     renderReports();
@@ -755,6 +762,15 @@ async function renderCustomerDetail(id) {
     const c = data.customer;
     const complaints = data.complaints;
 
+    let memberInfo = null;
+    try {
+      const memberRes = await fetch(`/api/membership/members/${id}`);
+      if (memberRes.ok) {
+        const memberJson = await memberRes.json();
+        if (memberJson.success) memberInfo = memberJson.data.membership;
+      }
+    } catch (e) {}
+
     const initials = c.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
     content.innerHTML = `
@@ -774,6 +790,7 @@ async function renderCustomerDetail(id) {
                 <span class="badge ${c.status === 'ACTIVE' ? 'badge-success' : 'badge-neutral'}" style="margin-left: 8px;">
                   ${c.status === 'ACTIVE' ? 'Aktif' : 'Diarsipkan'}
                 </span>
+                ${memberInfo ? `<span class="badge badge-gold" style="margin-left: 6px;">Member ${escapeHtml(memberInfo.member_code)}</span>` : ''}
               </h2>
               <div style="font-size: 13px; color: #64748B;">
                 Kode: <strong>${c.customer_code}</strong> &bull; Terdaftar sejak ${formatDateIndo(c.joined_at)} &bull; Sumber: <span class="badge badge-neutral">${c.source}</span>
@@ -786,6 +803,7 @@ async function renderCustomerDetail(id) {
               Kirim Pesan WhatsApp (+${c.phone})
             </a>
             <button class="btn btn-secondary btn-sm" onclick="openEditCustomerModal(${c.id})">Ubah Profil</button>
+            ${memberInfo ? `<button class="btn btn-primary btn-sm" onclick="openMemberDetail(${c.id})">Detail Member</button>` : ''}
             ${c.status === 'ACTIVE'
               ? `<button class="btn btn-secondary btn-sm" style="color: #B91C1C;" onclick="openArchiveModal(${c.id}, '${c.name.replace(/'/g, "\\'")}')">Arsipkan</button>`
               : `<button class="btn btn-secondary btn-sm" style="color: #15803D;" onclick="handleActivateCustomer(${c.id})">Aktifkan Kembali</button>`
@@ -1998,6 +2016,50 @@ function initAdminSSE() {
       }
     } catch (err) {}
   });
+
+  // Event: Member baru terdaftar dari halaman publik /daftar-member
+  adminSSE.addEventListener('member_registered', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      const name = data.customer ? data.customer.name : 'Member baru';
+      showToast(`Member baru terdaftar: ${name}`);
+      if (currentRoute === 'membership') loadMembershipData();
+    } catch (err) {}
+  });
+
+  // Event: Pesan simulasi membership terkirim (welcome, promo QR, kupon)
+  adminSSE.addEventListener('member_message_sent', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      const labels = {
+        WELCOME: 'Welcome message',
+        QR_PROMO: 'Promo QR',
+        END_MONTH_COUPON: 'Kupon tanggal tua'
+      };
+      showToast(`${labels[data.message_type] || 'Pesan member'} terkirim ke ${data.customer_name || data.phone}.`);
+      if (currentRoute === 'membership') loadMembershipData();
+    } catch (err) {}
+  });
+
+  // Event: Kupon ditandai sudah dipakai
+  adminSSE.addEventListener('coupon_redeemed', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      showToast(`Kupon ${data.coupon_code} ditandai sudah dipakai.`);
+      if (currentRoute === 'membership') loadMembershipData();
+    } catch (err) {}
+  });
+
+  // Event: Promo tanggal tua dijalankan (manual atau scheduler)
+  adminSSE.addEventListener('end_month_promo_run', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (!data.skipped) {
+        showToast(`Promo tanggal tua: ${data.issued} kupon diterbitkan.`);
+      }
+      if (currentRoute === 'membership') loadMembershipData();
+    } catch (err) {}
+  });
 }
 
 function renderSimChatBubbles() {
@@ -2544,6 +2606,617 @@ async function renderSimulation() {
 
   scrollSimChatToBottom();
   startSimSlaTicker();
+}
+
+// -------------------------------------------------------------
+// MEMBERSHIP, QR PROMO & KUPON TANGGAL TUA
+// -------------------------------------------------------------
+let membershipSearch = '';
+let membershipStatus = '';
+let membershipSearchTimer = null;
+
+function membershipBadge(status) {
+  if (status === 'ACTIVE') return '<span class="badge badge-success">Aktif</span>';
+  if (status === 'INACTIVE') return '<span class="badge badge-neutral">Nonaktif</span>';
+  return `<span class="badge badge-neutral">${escapeHtml(status)}</span>`;
+}
+
+function couponBadge(status) {
+  if (status === 'ISSUED') return '<span class="badge badge-warning">Terbit</span>';
+  if (status === 'USED') return '<span class="badge badge-success">Dipakai</span>';
+  if (status === 'EXPIRED') return '<span class="badge badge-neutral">Kedaluwarsa</span>';
+  return `<span class="badge badge-neutral">${escapeHtml(status)}</span>`;
+}
+
+function messageTypeLabel(type) {
+  const labels = {
+    WELCOME: 'Welcome',
+    QR_PROMO: 'Promo QR',
+    END_MONTH_COUPON: 'Kupon Tanggal Tua'
+  };
+  return labels[type] || type;
+}
+
+async function renderMembership() {
+  const content = document.getElementById('content-area');
+  initAdminSSE();
+
+  content.innerHTML = `
+    <div class="membership-banner">
+      <div>
+        <div class="membership-banner-title">
+          <span class="badge badge-success" style="font-size: 10px; padding: 2px 6px;">SIMULASI WHATSAPP</span>
+          <span>Membership &amp; Promo Tanggal Tua</span>
+        </div>
+        <div class="membership-banner-sub">
+          Welcome message, promo QR, dan kupon 10% dikirim sebagai simulasi. Semua pesan tersimpan di outbox CRM.
+        </div>
+      </div>
+      <a href="/daftar-member" target="_blank" class="btn btn-primary" style="font-size: 12px; padding: 8px 14px; text-decoration: none;">
+        Buka Halaman Daftar Member &nearr;
+      </a>
+    </div>
+
+    <div class="stats-grid" id="membership-stats">
+      <div class="stat-card"><div class="stat-card-title">Total Member</div><div class="stat-card-value">-</div></div>
+      <div class="stat-card"><div class="stat-card-title">Member Baru Bulan Ini</div><div class="stat-card-value">-</div></div>
+      <div class="stat-card"><div class="stat-card-title">Pasif &gt; 14 Hari</div><div class="stat-card-value">-</div></div>
+      <div class="stat-card"><div class="stat-card-title">Kupon Terbit / Terpakai</div><div class="stat-card-value">-</div></div>
+    </div>
+
+    <div class="toolbar" style="margin-bottom: 16px;">
+      <div class="toolbar-left">
+        <input type="text" class="form-control" style="width: 240px;" placeholder="Cari nama, nomor, atau kode member..." oninput="handleMembershipSearch(this.value)">
+        <select class="form-control" style="width: 160px;" onchange="handleMembershipStatus(this.value)">
+          <option value="">Semua Status</option>
+          <option value="ACTIVE">Aktif</option>
+          <option value="INACTIVE">Nonaktif</option>
+        </select>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-secondary" onclick="loadMembershipData()">Muat Ulang</button>
+        <button class="btn btn-primary" onclick="handleRunEndMonthPromo()">Jalankan Promo Tanggal Tua</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <div class="card-header" style="padding: 16px 20px; margin-bottom: 0;">
+        <div>
+          <h2>Daftar Member</h2>
+          <p>Klik detail untuk melihat riwayat transaksi, pesan, dan kupon.</p>
+        </div>
+        <span class="badge badge-info" id="membership-count-badge">-</span>
+      </div>
+      <div class="table-container" style="border: none; border-top: 1px solid var(--card-border); border-radius: 0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Kode Member</th>
+              <th>Nama</th>
+              <th>Nomor WhatsApp</th>
+              <th>Status</th>
+              <th>Transaksi Terakhir</th>
+              <th>Tidak Aktif</th>
+              <th style="text-align: right;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="membership-tbody">
+            <tr><td colspan="7"><div class="empty-state">Memuat data member...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="membership-grid">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>QR Campaign</h2>
+            <p>Unduh QR untuk outlet, kemasan, dan meja dine-in.</p>
+          </div>
+        </div>
+        <div id="membership-campaigns" class="campaign-list">
+          <div class="empty-state">Memuat QR campaign...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2>Kupon Tanggal Tua</h2>
+            <p>Diskon 10%, berlaku 7 hari sejak diterbitkan.</p>
+          </div>
+        </div>
+        <div class="table-container" style="border: none;">
+          <table>
+            <thead>
+              <tr>
+                <th>Kode Kupon</th>
+                <th>Member</th>
+                <th>Berlaku Sampai</th>
+                <th>Status</th>
+                <th style="text-align: right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="membership-coupons">
+              <tr><td colspan="5"><div class="empty-state">Memuat kupon...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h2>Outbox Pesan Simulasi</h2>
+          <p>Semua welcome message, promo QR, dan kupon yang dikirim sistem.</p>
+        </div>
+        <span class="badge badge-neutral">Provider: SIMULATION</span>
+      </div>
+      <div class="table-container" style="border: none;">
+        <table>
+          <thead>
+            <tr>
+              <th>Waktu</th>
+              <th>Tujuan</th>
+              <th>Jenis</th>
+              <th>Isi Pesan</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="membership-messages">
+            <tr><td colspan="5"><div class="empty-state">Memuat outbox pesan...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  loadMembershipData();
+}
+
+function handleMembershipSearch(val) {
+  clearTimeout(membershipSearchTimer);
+  membershipSearchTimer = setTimeout(() => {
+    membershipSearch = val;
+    loadMembershipMembers();
+  }, 300);
+}
+
+function handleMembershipStatus(val) {
+  membershipStatus = val;
+  loadMembershipMembers();
+}
+
+async function loadMembershipData() {
+  await Promise.all([
+    loadMembershipStats(),
+    loadMembershipMembers(),
+    loadMembershipCampaigns(),
+    loadMembershipCoupons(),
+    loadMembershipMessages()
+  ]);
+}
+
+async function loadMembershipStats() {
+  const box = document.getElementById('membership-stats');
+  if (!box) return;
+  try {
+    const res = await fetch('/api/membership/stats');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal memuat statistik.');
+    const d = json.data;
+    const monthEnd = d.month_end || {};
+    box.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-card-title">Total Member</div>
+        <div class="stat-card-value">${d.total_members}</div>
+        <div class="stat-card-sub">${d.active_members} member aktif</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-title">Member Baru Bulan Ini</div>
+        <div class="stat-card-value" style="color: var(--primary);">${d.new_this_month}</div>
+        <div class="stat-card-sub">Bergabung bulan berjalan</div>
+      </div>
+      <div class="stat-card ${d.inactive_14 > 0 ? 'stat-card-danger' : ''}">
+        <div class="stat-card-title">Pasif &gt; 14 Hari</div>
+        <div class="stat-card-value">${d.inactive_14}</div>
+        <div class="stat-card-sub">Kandidat kupon tanggal tua</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-title">Kupon Terbit / Terpakai</div>
+        <div class="stat-card-value">${d.coupons_issued} / ${d.coupons_used}</div>
+        <div class="stat-card-sub">Window: 3 hari terakhir bulan ${monthEnd.in_window ? '(aktif)' : '(belum aktif)'}</div>
+      </div>
+    `;
+  } catch (err) {
+    box.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function loadMembershipMembers() {
+  const tbody = document.getElementById('membership-tbody');
+  const countBadge = document.getElementById('membership-count-badge');
+  if (!tbody) return;
+
+  const params = new URLSearchParams({
+    search: membershipSearch,
+    status: membershipStatus,
+    limit: '100'
+  });
+
+  try {
+    const res = await fetch('/api/membership/members?' + params.toString());
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal memuat member.');
+    const rows = json.data || [];
+    if (countBadge) countBadge.innerText = `${json.pagination ? json.pagination.total : rows.length} member`;
+
+    if (rows.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              Belum ada member yang sesuai.
+              <div class="empty-state-sub">Bagikan QR campaign atau buka halaman /daftar-member untuk menambah member.</div>
+            </div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = rows.map(m => `
+      <tr>
+        <td><strong>${escapeHtml(m.member_code)}</strong></td>
+        <td>${escapeHtml(m.name)}</td>
+        <td>+${escapeHtml(m.phone)}</td>
+        <td>${membershipBadge(m.status)}</td>
+        <td>${m.last_transaction_at ? formatDateIndo(m.last_transaction_at) : '<span style="color: var(--text-muted);">Belum ada</span>'}</td>
+        <td>
+          <span class="badge ${m.inactive_14 ? 'badge-danger' : 'badge-neutral'}">
+            ${m.inactive_days} hari
+          </span>
+        </td>
+        <td style="text-align: right; white-space: nowrap;">
+          <button class="btn btn-secondary btn-sm" onclick="openMemberDetail(${m.customer_id})">Detail</button>
+          <button class="btn btn-primary btn-sm" onclick="openTransactionModal(${m.customer_id})">Catat Transaksi</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">${escapeHtml(err.message)}</div></td></tr>`;
+  }
+}
+
+async function loadMembershipCampaigns() {
+  const box = document.getElementById('membership-campaigns');
+  if (!box) return;
+  try {
+    const res = await fetch('/api/membership/campaigns');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal memuat campaign.');
+    box.innerHTML = (json.data || []).map(c => `
+      <div class="campaign-card">
+        <img src="/api/membership/qr/${encodeURIComponent(c.code)}.svg" alt="QR ${escapeHtml(c.label)}" class="campaign-qr">
+        <div class="campaign-body">
+          <div class="campaign-code">${escapeHtml(c.code)}</div>
+          <div class="campaign-label">${escapeHtml(c.label)}</div>
+          <div class="campaign-desc">${escapeHtml(c.description)}</div>
+          <div class="campaign-actions">
+            <a class="btn btn-secondary btn-sm" href="/api/membership/qr/${encodeURIComponent(c.code)}.png" download="${escapeHtml(c.code)}.png">Unduh PNG</a>
+            <a class="btn btn-primary btn-sm" href="/daftar-member?campaign=${encodeURIComponent(c.code)}" target="_blank">Buka Form</a>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    box.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function loadMembershipCoupons() {
+  const tbody = document.getElementById('membership-coupons');
+  if (!tbody) return;
+  try {
+    const res = await fetch('/api/membership/coupons?limit=20');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal memuat kupon.');
+    const rows = json.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">Belum ada kupon. Jalankan promo tanggal tua untuk demo.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(c => `
+      <tr>
+        <td><strong style="font-family: monospace; font-size: 12px;">${escapeHtml(c.coupon_code)}</strong></td>
+        <td>${escapeHtml(c.customer_name)}</td>
+        <td>${formatDateIndo(c.expires_at)}</td>
+        <td>${couponBadge(c.status)}</td>
+        <td style="text-align: right;">
+          ${c.status === 'ISSUED'
+            ? `<button class="btn btn-primary btn-sm" onclick="redeemMemberCoupon(${c.id})">Tandai Dipakai</button>`
+            : '<span style="font-size: 11.5px; color: var(--text-muted);">-</span>'}
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">${escapeHtml(err.message)}</div></td></tr>`;
+  }
+}
+
+async function loadMembershipMessages() {
+  const tbody = document.getElementById('membership-messages');
+  if (!tbody) return;
+  try {
+    const res = await fetch('/api/membership/messages?limit=20');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal memuat pesan.');
+    const rows = json.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">Belum ada pesan simulasi.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(m => `
+      <tr>
+        <td style="white-space: nowrap;">${formatDateIndo(m.sent_at || m.created_at)}</td>
+        <td>
+          <div style="font-weight: 600;">${escapeHtml(m.customer_name)}</div>
+          <div style="font-size: 11.5px; color: var(--text-muted);">+${escapeHtml(m.phone)}</div>
+        </td>
+        <td><span class="badge ${m.message_type === 'END_MONTH_COUPON' ? 'badge-gold' : 'badge-info'}">${messageTypeLabel(m.message_type)}</span></td>
+        <td><div class="outbox-body">${escapeHtml(m.body)}</div></td>
+        <td>
+          <span class="badge badge-success">${escapeHtml(m.status)}</span>
+          <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(m.provider)}</div>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">${escapeHtml(err.message)}</div></td></tr>`;
+  }
+}
+
+async function openMemberDetail(customerId) {
+  const container = document.getElementById('modal-container');
+  container.innerHTML = `
+    <div class="modal-scrim" onclick="if(event.target === this) closeModal()">
+      <div class="modal-content" style="max-width: 780px;">
+        <div class="modal-header">
+          <h3>Detail Member</h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body"><div class="empty-state">Memuat detail member...</div></div>
+      </div>
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`/api/membership/members/${customerId}`);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal memuat detail.');
+    const { membership, transactions, messages, coupons } = json.data;
+
+    const txnRows = transactions.length === 0
+      ? '<tr><td colspan="4"><div class="empty-state">Belum ada transaksi tercatat.</div></td></tr>'
+      : transactions.map(t => `
+          <tr>
+            <td>${formatDateIndo(t.occurred_at)}</td>
+            <td><span class="badge badge-neutral">${escapeHtml(t.channel)}</span></td>
+            <td>${escapeHtml(t.notes || '-')}</td>
+            <td>${formatDateIndo(t.created_at)}</td>
+          </tr>
+        `).join('');
+
+    const couponRows = coupons.length === 0
+      ? '<tr><td colspan="4"><div class="empty-state">Belum ada kupon.</div></td></tr>'
+      : coupons.map(c => `
+          <tr>
+            <td><strong style="font-family: monospace; font-size: 12px;">${escapeHtml(c.coupon_code)}</strong></td>
+            <td>${escapeHtml(c.campaign_id)}</td>
+            <td>${formatDateIndo(c.expires_at)}</td>
+            <td>
+              ${couponBadge(c.status)}
+              ${c.status === 'ISSUED' ? `<button class="btn btn-secondary btn-sm" style="margin-left: 6px;" onclick="redeemMemberCoupon(${c.id}, ${customerId})">Pakai</button>` : ''}
+            </td>
+          </tr>
+        `).join('');
+
+    const messageRows = messages.length === 0
+      ? '<tr><td colspan="3"><div class="empty-state">Belum ada pesan.</div></td></tr>'
+      : messages.map(m => `
+          <tr>
+            <td style="white-space: nowrap;">${formatDateIndo(m.sent_at || m.created_at)}</td>
+            <td><span class="badge badge-info">${messageTypeLabel(m.message_type)}</span></td>
+            <td><div class="outbox-body">${escapeHtml(m.body)}</div></td>
+          </tr>
+        `).join('');
+
+    container.querySelector('.modal-content').innerHTML = `
+      <div class="modal-header">
+        <div>
+          <h3 style="margin-bottom: 2px;">${escapeHtml(membership.name)}</h3>
+          <div style="font-size: 12px; color: var(--text-muted);">${escapeHtml(membership.member_code)} &bull; +${escapeHtml(membership.phone)}</div>
+        </div>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="member-detail-meta">
+          <div><span class="meta-label">Status</span>${membershipBadge(membership.status)}</div>
+          <div><span class="meta-label">Terdaftar Via</span><span class="badge badge-neutral">${escapeHtml(membership.registered_via)}</span></div>
+          <div><span class="meta-label">Bergabung</span>${formatDateIndo(membership.joined_at)}</div>
+          <div><span class="meta-label">Transaksi Terakhir</span>${membership.last_transaction_at ? formatDateIndo(membership.last_transaction_at) : 'Belum ada'}</div>
+        </div>
+
+        <div class="member-detail-section">
+          <div class="member-detail-section-head">
+            <h4>Riwayat Transaksi Manual</h4>
+            <button class="btn btn-primary btn-sm" onclick="openTransactionModal(${customerId})">+ Catat Transaksi</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Tanggal</th><th>Kanal</th><th>Catatan</th><th>Dicatat</th></tr></thead>
+              <tbody>${txnRows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="member-detail-section">
+          <div class="member-detail-section-head">
+            <h4>Kupon</h4>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Kode</th><th>Campaign</th><th>Berlaku Sampai</th><th>Status</th></tr></thead>
+              <tbody>${couponRows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="member-detail-section">
+          <div class="member-detail-section-head">
+            <h4>Pesan Simulasi</h4>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Waktu</th><th>Jenis</th><th>Isi</th></tr></thead>
+              <tbody>${messageRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-secondary" href="/simulasi?phone=${encodeURIComponent(membership.phone)}&name=${encodeURIComponent(membership.name)}" target="_blank">Buka WhatsApp Simulasi</a>
+        <button class="btn btn-primary" onclick="closeModal()">Tutup</button>
+      </div>
+    `;
+  } catch (err) {
+    container.querySelector('.modal-body').innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function openTransactionModal(customerId) {
+  let customerName = 'Member';
+  try {
+    const res = await fetch(`/api/membership/members/${customerId}`);
+    const json = await res.json();
+    if (json.success && json.data && json.data.membership) {
+      customerName = json.data.membership.name;
+    }
+  } catch (e) {}
+
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const defaultDate = `${yyyy}-${mm}-${dd}`;
+
+  const container = document.getElementById('modal-container');
+  container.innerHTML = `
+    <div class="modal-scrim" onclick="if(event.target === this) closeModal()">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Catat Transaksi Member</h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form onsubmit="handleTransactionSubmit(event, ${customerId})">
+          <div class="modal-body">
+            <div class="member-alert member-alert-info" style="margin-bottom: 14px;">
+              Transaksi manual hanya mencatat tanggal aktivitas. Tidak ada pembayaran, POS, atau stok.
+            </div>
+            <div class="form-group">
+              <label class="form-label">Member</label>
+              <input type="text" class="form-control" value="${escapeHtml(customerName)}" disabled>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tanggal Transaksi *</label>
+              <input type="date" id="txn-date" class="form-control" value="${defaultDate}" max="${defaultDate}" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Kanal</label>
+              <select id="txn-channel" class="form-control">
+                <option value="DIRECT">Langsung (Outlet)</option>
+                <option value="GOFOOD">GoFood</option>
+                <option value="GRABFOOD">GrabFood</option>
+                <option value="OTHER">Lainnya</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Catatan</label>
+              <textarea id="txn-notes" class="form-control" placeholder="Contoh: Beli paket hemat berdua di outlet Margonda."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
+            <button type="submit" class="btn btn-primary">Simpan Transaksi</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+async function handleTransactionSubmit(e, customerId) {
+  e.preventDefault();
+  const date = document.getElementById('txn-date').value;
+  const channel = document.getElementById('txn-channel').value;
+  const notes = document.getElementById('txn-notes').value;
+  if (!date) {
+    showToast('Tanggal transaksi wajib diisi.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/membership/members/${customerId}/transactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        occurred_at: new Date(`${date}T00:00:00`).toISOString(),
+        channel,
+        notes
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal menyimpan transaksi.');
+    showToast(json.message);
+    closeModal();
+    if (currentRoute === 'membership') loadMembershipData();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function redeemMemberCoupon(couponId, reopenCustomerId = null) {
+  try {
+    const res = await fetch(`/api/membership/coupons/${couponId}/redeem`, { method: 'POST' });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal memakai kupon.');
+    showToast(json.message);
+    if (currentRoute === 'membership') loadMembershipData();
+    if (reopenCustomerId) openMemberDetail(reopenCustomerId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleRunEndMonthPromo() {
+  const confirmed = window.confirm('Jalankan promo tanggal tua sekarang? Mode demo memaksa penerbitan kupon meskipun di luar 3 hari terakhir bulan.');
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/membership/campaigns/end-month/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: true })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal menjalankan promo.');
+    showToast(json.message);
+    loadMembershipData();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 // -------------------------------------------------------------

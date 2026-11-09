@@ -7,8 +7,9 @@
     "start": "node src/server.js",
     "seed": "node src/db/seed.js",
     "test": "node tests/acceptance.test.js",
+    "test:membership": "node tests/membership.test.js",
     "test:realtime": "node tests/realtime_simulation.test.js",
-    "test:all": "node tests/acceptance.test.js && node tests/server.test.js && node tests/simulation.test.js && node tests/realtime_simulation.test.js"
+    "test:all": "node tests/acceptance.test.js && node tests/membership.test.js && node tests/server.test.js && node tests/simulation.test.js && node tests/realtime_simulation.test.js"
   },
   "keywords": [
     "crm",
@@ -21,7 +22,8 @@
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "express": "^4.21.2",
-    "express-session": "^1.18.1"
+    "express-session": "^1.18.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "puppeteer-core": "^25.16.0"

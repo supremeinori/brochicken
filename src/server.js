@@ -22,6 +22,8 @@ const reportRoutes = require('./routes/reports');
 const adminRoutes = require('./routes/admin');
 const settingsRoutes = require('./routes/settings');
 const simulationRoutes = require('./routes/simulation');
+const membershipRoutes = require('./routes/membership');
+const { startScheduler } = require('./services/membershipScheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -61,6 +63,12 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/simulation', simulationRoutes);
+app.use('/api/membership', membershipRoutes);
+
+// Rute Publik Registrasi Member (Tanpa Login)
+app.get('/daftar-member', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'daftar-member.html'));
+});
 
 // Rute Publik Khusus Simulasi WhatsApp Pelanggan (Tanpa Login)
 app.get('/simulasi', (req, res) => {
@@ -79,6 +87,7 @@ app.get('*', (req, res) => {
 });
 
 if (require.main === module) {
+  startScheduler();
   app.listen(PORT, () => {
     console.log(`[Bro Chicken CRM] Server aktif berjalan di http://localhost:${PORT}`);
   });

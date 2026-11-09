@@ -2,7 +2,7 @@ const assert = require('node:assert');
 const { getDb } = require('../src/db/database');
 const { seedDatabase } = require('../src/db/seed');
 
-console.log('=== MEMULAI PENGUJIAN 15 KRITERIA PENERIMAAN SRS v1.2 ===\n');
+console.log('=== MEMULAI PENGUJIAN 20 KRITERIA PENERIMAAN SRS v2.0 ===\n');
 
 const db = getDb();
 seedDatabase(db);
@@ -144,4 +144,94 @@ test(15, 'File database SQLite lokal ada dan valid', () => {
   assert.ok(stats.size > 0, 'Ukuran database harus lebih besar dari 0');
 });
 
-console.log(`\nHasil: ${passCount}/15 Kriteria Berhasil Lulus Pengujian!`);
+// 16. Struktur Database Membership
+test(16, 'Tabel membership, transaksi member, kupon, dan outbox pesan tersedia', () => {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(t => t.name);
+  ['memberships', 'member_transactions', 'member_coupons', 'member_messages'].forEach(t => {
+    assert.ok(tables.includes(t), `Tabel ${t} harus tersedia.`);
+  });
+  assert.ok(db.prepare('SELECT COUNT(*) AS c FROM memberships').get().c >= 6);
+});
+
+// 17. Katalog & Campaign QR
+test(17, 'Katalog paket hemat dan tiga campaign QR tersedia', () => {
+  const membership = require('../src/services/membership');
+  const campaigns = membership.listCampaigns();
+  assert.strictEqual(campaigns.length, 3);
+  const codes = campaigns.map(c => c.code).sort();
+  assert.deepStrictEqual(codes, ['QR_OUTLET', 'QR_PACKAGING', 'QR_TABLE']);
+  const catalog = membership.getCatalog(membership.getCampaign('QR_OUTLET'));
+  assert.ok(catalog.length >= 3);
+  assert.ok(catalog.every(item => item.price > 0));
+});
+
+// 18. Registrasi Member & Identitas Nomor
+test(18, 'Nomor WhatsApp unik: registrasi ulang memperbarui nama tanpa data ganda', () => {
+  const membership = require('../src/services/membership');
+  const phone = `6288${String(Date.now()).slice(-8)}1`;
+  const first = membership.registerMember({
+    name: 'Nama Awal Uji',
+    phone,
+    campaignCode: 'QR_OUTLET',
+    consent: true
+  });
+  const before = db.prepare('SELECT COUNT(*) AS c FROM customers').get().c;
+  const second = membership.registerMember({
+    name: 'Nama Terbaru Uji',
+    phone,
+    campaignCode: 'QR_OUTLET',
+    consent: true
+  });
+  const after = db.prepare('SELECT COUNT(*) AS c FROM customers').get().c;
+
+  assert.strictEqual(after, before);
+  assert.strictEqual(first.customer.id, second.customer.id);
+  assert.strictEqual(second.customer.name, 'Nama Terbaru Uji');
+  assert.strictEqual(
+    db.prepare("SELECT COUNT(*) AS c FROM member_messages WHERE customer_id = ? AND message_type = 'WELCOME'").get(first.customer.id).c,
+    1
+  );
+});
+
+// 19. Kupon Tanggal Tua
+test(19, 'Kupon tanggal tua 10% berlaku 7 hari dan idempoten', () => {
+  const membership = require('../src/services/membership');
+  const now = new Date();
+  const phone = `6288${String(Date.now()).slice(-8)}2`;
+  const member = membership.registerMember({
+    name: 'Member Uji Kupon',
+    phone,
+    campaignCode: 'QR_TABLE',
+    consent: true,
+    now: new Date(now.getTime() - 30 * 86400000)
+  });
+
+  const firstRun = membership.runEndMonthPromo({ now, force: true });
+  assert.ok(firstRun.issued >= 1);
+
+  const info = membership.getMonthEndInfo(now);
+  const coupons = db.prepare(`
+    SELECT * FROM member_coupons WHERE customer_id = ? AND campaign_id = ?
+  `).all(member.customer.id, info.campaign_id);
+  assert.strictEqual(coupons.length, 1);
+  assert.strictEqual(coupons[0].discount_percent, 10);
+  const days = Math.round((new Date(coupons[0].expires_at) - new Date(coupons[0].issued_at)) / 86400000);
+  assert.strictEqual(days, 7);
+
+  membership.runEndMonthPromo({ now, force: true });
+  const again = db.prepare(`
+    SELECT COUNT(*) AS c FROM member_coupons WHERE customer_id = ? AND campaign_id = ?
+  `).get(member.customer.id, info.campaign_id).c;
+  assert.strictEqual(again, 1);
+});
+
+// 20. Outbox Simulasi WhatsApp
+test(20, 'Pesan membership tersimpan di outbox dengan provider SIMULATION', () => {
+  const messages = db.prepare("SELECT * FROM member_messages WHERE provider = 'SIMULATION'").all();
+  assert.ok(messages.length > 0);
+  const types = new Set(messages.map(m => m.message_type));
+  assert.ok(types.has('WELCOME'));
+  assert.ok(messages.every(m => ['QUEUED', 'SENT', 'FAILED'].includes(m.status)));
+});
+
+console.log(`\nHasil: ${passCount}/20 Kriteria Berhasil Lulus Pengujian!`);

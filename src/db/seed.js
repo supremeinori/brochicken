@@ -5,6 +5,7 @@ function seedDatabase(db) {
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (userCount > 0) {
     console.log('[Seed] Database sudah memiliki data pengguna. Melewati seeding.');
+    seedMembershipDemoData(db);
     return;
   }
 
@@ -234,6 +235,123 @@ function seedDatabase(db) {
   console.log('   * Admin 3: username "doni_pratama", sandi "12345678"');
   console.log(' - 21 Data Pelanggan Simulasi');
   console.log(' - 6 Tiket Keluhan & Log Aktivitas Kronologis');
+
+  seedMembershipDemoData(db);
+}
+
+// Data demo membership. Idempoten: dilewati jika sudah ada membership.
+function seedMembershipDemoData(db) {
+  const memberCount = db.prepare('SELECT COUNT(*) as count FROM memberships').get().count;
+  if (memberCount > 0) {
+    console.log('[Seed] Data membership sudah tersedia. Melewati seeding membership.');
+    return;
+  }
+
+  const now = Date.now();
+  const iso = (daysAgo) => new Date(now - daysAgo * 86400000).toISOString();
+
+  const demoMembers = [
+    { phone: '6281234567890', code: 'MBR-2026-0001', via: 'QR_OUTLET', joined: 60, lastTxn: 30 },
+    { phone: '6281234567891', code: 'MBR-2026-0002', via: 'QR_PACKAGING', joined: 45, lastTxn: 20 },
+    { phone: '6281234567892', code: 'MBR-2026-0003', via: 'QR_TABLE', joined: 30, lastTxn: 4 },
+    { phone: '6281234567893', code: 'MBR-2026-0004', via: 'QR_OUTLET', joined: 20, lastTxn: 16 },
+    { phone: '6281234567894', code: 'MBR-2026-0005', via: 'QR_TABLE', joined: 8, lastTxn: null },
+    { phone: '6281234567895', code: 'MBR-2026-0006', via: 'MANUAL', joined: 40, lastTxn: null }
+  ];
+
+  const insertMember = db.prepare(`
+    INSERT INTO memberships (
+      customer_id, member_code, status, registered_via, campaign_code,
+      joined_at, welcome_sent_at, last_transaction_at, consent_at, created_at, updated_at
+    ) VALUES (?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertTxn = db.prepare(`
+    INSERT INTO member_transactions (customer_id, occurred_at, channel, notes, created_by, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertMessage = db.prepare(`
+    INSERT INTO member_messages (
+      customer_id, phone, message_type, body, status, provider,
+      campaign_code, coupon_id, created_at, sent_at
+    ) VALUES (?, ?, ?, ?, 'SENT', 'SIMULATION', ?, NULL, ?, ?)
+  `);
+
+  const admin = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
+  let created = 0;
+
+  for (const item of demoMembers) {
+    const customer = db.prepare('SELECT * FROM customers WHERE phone = ?').get(item.phone);
+    if (!customer) continue;
+
+    const joinedAt = iso(item.joined);
+    const welcomeAt = iso(item.joined - 0.001);
+    insertMember.run(
+      customer.id,
+      item.code,
+      item.via,
+      item.via === 'MANUAL' ? null : item.via,
+      joinedAt,
+      welcomeAt,
+      item.lastTxn === null ? null : iso(item.lastTxn),
+      joinedAt,
+      joinedAt,
+      joinedAt
+    );
+
+    insertMessage.run(
+      customer.id,
+      customer.phone,
+      'WELCOME',
+      `Halo Kak ${customer.name}, selamat datang di Bro Chicken Membership!\n\nKatalog Paket Hemat:\n1. Paket Hemat Krispi - Nasi + Ayam Krispi + Es Teh (Rp25.000)\n2. Paket Hemat Geprek - Nasi + Ayam Geprek + Es Teh (Rp27.000)\n3. Paket Hemat Berdua - 2 Nasi + 2 Ayam + 2 Es Teh (Rp50.000)\n\nKode member: ${item.code}`,
+      item.via === 'MANUAL' ? null : item.via,
+      joinedAt,
+      welcomeAt
+    );
+
+    if (item.lastTxn !== null) {
+      insertTxn.run(
+        customer.id,
+        iso(item.lastTxn),
+        customer.source,
+        'Transaksi demo membership di outlet Margonda.',
+        admin ? admin.id : null,
+        iso(item.lastTxn)
+      );
+      // Riwayat tambahan agar detail member terlihat hidup.
+      insertTxn.run(
+        customer.id,
+        iso(item.lastTxn + 7),
+        customer.source,
+        'Transaksi demo sebelumnya.',
+        admin ? admin.id : null,
+        iso(item.lastTxn + 7)
+      );
+    }
+    created++;
+  }
+
+  // Satu kupon demo yang sudah terpakai pada bulan sebelumnya.
+  const hendra = db.prepare("SELECT id FROM customers WHERE phone = '6281234567890'").get();
+  if (hendra) {
+    db.prepare(`
+      INSERT OR IGNORE INTO member_coupons (
+        coupon_code, customer_id, campaign_id, discount_percent, status,
+        issued_at, expires_at, used_at, used_by, created_at
+      ) VALUES (?, ?, 'END_MONTH_2026-10', 10, 'USED', ?, ?, ?, ?, ?)
+    `).run(
+      'BC-TU-202610-0001',
+      hendra.id,
+      iso(35),
+      iso(28),
+      iso(27),
+      admin ? admin.id : null,
+      iso(35)
+    );
+  }
+
+  console.log(`[Seed] Data membership demo: ${created} member, riwayat transaksi, dan 1 kupon terpakai.`);
 }
 
 if (require.main === module) {
@@ -241,4 +359,4 @@ if (require.main === module) {
   seedDatabase(db);
 }
 
-module.exports = { seedDatabase };
+module.exports = { seedDatabase, seedMembershipDemoData };

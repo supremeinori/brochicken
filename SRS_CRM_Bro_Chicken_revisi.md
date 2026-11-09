@@ -6,14 +6,14 @@
 | --- | --- |
 | Nama Sistem | Bro Chicken Customer Relationship Management (CRM) |
 | Jenis Sistem | Website CRM internal |
-| Versi Dokumen | 1.2 |
+| Versi Dokumen | 2.0 |
 | Status | Baseline kebutuhan sistem yang ditetapkan |
 | Studi Kasus | Bro Chicken |
-| Tahap Pengembangan | P11–P12 |
+| Tahap Pengembangan | P11–P13 |
 | Frontend | HTML, CSS, Vanilla JavaScript |
 | Backend | Node.js dan Express.js |
 | Database | SQLite |
-| Pengguna | Owner dan Admin |
+| Pengguna | Owner, Admin, dan Member publik tanpa login |
 
 ## Riwayat Revisi
 
@@ -22,6 +22,7 @@
 | 1.0 | Rancangan awal kebutuhan CRM Bro Chicken. |
 | 1.1 | Menghapus tabel database message_templates; template WhatsApp ditetapkan sebagai konfigurasi statis aplikasi. |
 | 1.2 | Menetapkan scope, fitur, hak akses, alur status, SLA, struktur data, dan pembagian P11–P12 secara final. Menghapus fitur loyalitas dan promosi dari scope sistem. |
+| 2.0 | Menambahkan Membership & Promo: registrasi mandiri melalui QR campaign, welcome message dan katalog paket hemat, log transaksi manual tanpa POS, serta kupon tanggal tua 10% yang berlaku 7 hari. Pengiriman WhatsApp ditetapkan sebagai simulasi dengan outbox dan SSE. Menambahkan FR-09, empat tabel membership, tahap P13, dan lima kriteria penerimaan baru. |
 
 ## Daftar Isi
 
@@ -71,9 +72,13 @@ Menstandarkan pesan layanan pelanggan melalui template WhatsApp bawaan.
 
 Menyediakan dashboard dan laporan untuk memantau kinerja layanan pelanggan.
 
+Menyelenggarakan membership terintegrasi dengan registrasi publik, katalog paket hemat, dan kupon tanggal tua.
+
+Mengirim pesan membership melalui simulasi WhatsApp yang tersimpan pada outbox dan tampil real-time pada halaman yang terbuka.
+
 ### 1.3 Ruang Lingkup yang Ditetapkan
 
-Sistem memiliki sembilan area fungsi berikut:
+Sistem memiliki sepuluh area fungsi berikut:
 
 Login dan pembatasan hak akses Owner/Admin.
 
@@ -93,7 +98,9 @@ Manajemen akun Admin oleh Owner.
 
 Pengaturan akun pribadi dan pencadangan database.
 
-Sistem bukan aplikasi Point of Sale (POS). Sistem tidak mencatat pembayaran, penjualan, stok, atau transaksi pesanan secara lengkap.
+Membership, QR campaign, katalog paket hemat, log transaksi manual, dan kupon tanggal tua.
+
+Sistem bukan aplikasi Point of Sale (POS). Sistem tidak mencatat pembayaran, penjualan, stok, atau transaksi pesanan secara lengkap. Log transaksi member hanya mencatat tanggal, kanal, dan catatan aktivitas untuk menentukan member pasif. Tidak ada nominal harga, pembayaran, atau pengurangan stok di dalam log tersebut.
 
 ### 1.4 Istilah dan Definisi
 
@@ -107,10 +114,18 @@ Sistem bukan aplikasi Point of Sale (POS). Sistem tidak mencatat pembayaran, pen
 | PIC | Person in Charge atau Admin yang bertanggung jawab atas tiket. |
 | SLA | Service Level Agreement, yaitu target waktu respons keluhan. |
 | Data simulasi | Data fiktif yang digunakan untuk pengembangan dan pengujian. |
+| Member | Pelanggan yang terdaftar pada program membership dan memiliki kode member. |
+| Membership | Keanggotaan aktif seorang pelanggan pada program promo Bro Chicken. |
+| QR Campaign | Kode kampanye pada QR pendaftaran: QR_OUTLET, QR_PACKAGING, atau QR_TABLE. |
+| Katalog paket hemat | Daftar paket makanan beserta harga normal dan harga promo yang ditampilkan kepada member. |
+| Kupon tanggal tua | Kupon diskon 10% yang diterbitkan pada tiga hari terakhir bulan untuk member yang tidak bertransaksi lebih dari 14 hari. |
+| Consent | Persetujuan member untuk menerima pesan WhatsApp promotional. |
+| Outbox | Tabel penyimpan pesan simulasi WhatsApp beserta status QUEUED, SENT, atau FAILED. |
+| SSE | Server-Sent Events, mekanisme satu arah untuk mendorong pesan dari server ke browser yang terbuka. |
 
 ## 2. Pengguna dan Hak Akses
 
-Sistem hanya memiliki dua role: Owner dan Admin. Tidak ada role Kasir, Supervisor, atau akun pelanggan.
+Sistem hanya memiliki dua role login CRM: Owner dan Admin. Tidak ada role Kasir atau Supervisor. Member bukan role login CRM; member adalah pelanggan publik yang dapat mendaftar tanpa akun dan tanpa sesi login.
 
 ### 2.1 Owner
 
@@ -150,30 +165,45 @@ Menggunakan template WhatsApp bawaan.
 
 Melihat laporan CRM.
 
-Mengubah password akun sendiri. ( ini hapus admin enggak usah Ganti password ngapain)
+Mengelola data member, mencatat transaksi manual, menerbitkan QR campaign, dan menandai kupon sudah dipakai.
+
+Mengubah password akun sendiri.
 
 Admin tidak dapat membuat akun, mengubah role pengguna, menonaktifkan akun pengguna lain, mengubah konfigurasi sistem, atau mengunduh backup database.
 
-### 2.3 Matriks Hak Akses
+### 2.3 Member Publik
 
-| Modul/Fungsi | Owner | Admin |
-| --- | --- | --- |
-| Dashboard | Lihat | Lihat |
-| Data pelanggan | Lihat | Tambah, lihat, ubah, arsipkan |
-| Tiket keluhan | Lihat seluruh tiket | Buat dan kelola |
-| Penetapan PIC | Lihat | Tetapkan dan ubah PIC |
-| SLA | Lihat | Lihat dan tindak lanjuti |
-| Template WhatsApp | Lihat | Gunakan |
-| Laporan CRM | Lihat dan ekspor | Lihat dan ekspor |
-| Manajemen akun Admin | Kelola | Tidak memiliki akses |
-| Password akun sendiri | Ubah | Ubah |
-| Backup database | Unduh | Tidak memiliki akses |
+Member publik bukan pengguna CRM dan tidak memiliki sesi login. Member dapat:
+
+Membuka halaman `/daftar-member` dari QR campaign.
+
+Mendaftar dengan nama, nomor WhatsApp, dan consent.
+
+Melihat welcome message, katalog paket hemat, dan kupon pada layar hasil pendaftaran atau halaman simulasi WhatsApp.
+
+Member tidak dapat membuka dashboard, data pelanggan lain, tiket, laporan, atau endpoint admin.
+
+### 2.4 Matriks Hak Akses
+
+| Modul/Fungsi | Owner | Admin | Member publik |
+| --- | --- | --- | --- |
+| Dashboard | Lihat | Lihat | Tidak memiliki akses |
+| Data pelanggan | Lihat | Tambah, lihat, ubah, arsipkan | Tidak memiliki akses |
+| Tiket keluhan | Lihat seluruh tiket | Buat dan kelola | Tidak memiliki akses |
+| Penetapan PIC | Lihat | Tetapkan dan ubah PIC | Tidak memiliki akses |
+| SLA | Lihat | Lihat dan tindak lanjuti | Tidak memiliki akses |
+| Template WhatsApp | Lihat | Gunakan | Tidak memiliki akses |
+| Laporan CRM | Lihat dan ekspor | Lihat dan ekspor | Tidak memiliki akses |
+| Membership & Promo | Lihat dan kelola | Kelola | Daftar dan lihat pesan sendiri |
+| Manajemen akun Admin | Kelola | Tidak memiliki akses | Tidak memiliki akses |
+| Password akun sendiri | Ubah | Ubah | Tidak memiliki akun |
+| Backup database | Unduh | Tidak memiliki akses | Tidak memiliki akses |
 
 Seluruh pembatasan hak akses wajib diperiksa di backend. Menyembunyikan tombol pada frontend tidak cukup sebagai pengamanan.
 
 ## 3. Kebutuhan Fungsional (Functional Requirements)
 
-Seluruh requirement pada bagian ini termasuk dalam scope sistem dan wajib diimplementasikan sesuai tahap P11 atau P12.
+Seluruh requirement pada bagian ini termasuk dalam scope sistem dan wajib diimplementasikan sesuai tahap P11, P12, atau P13.
 
 ### FR-01 — Login dan Sesi Pengguna
 
@@ -310,6 +340,8 @@ Informasi penyelesaian keluhan.
 
 Permintaan ulasan pelanggan.
 
+Sistem juga menghasilkan tiga pesan membership otomatis: welcome message berisi katalog paket hemat, promo QR campaign, dan kupon tanggal tua. Pesan otomatis tersebut disimpan pada outbox `member_messages`, bukan sebagai template statis.
+
 | ID | Kebutuhan Fungsional |
 | --- | --- |
 | FR-06.01 | Sistem harus menampilkan empat template WhatsApp bawaan tersebut. |
@@ -320,6 +352,10 @@ Permintaan ulasan pelanggan.
 | FR-06.06 | Sistem harus menyediakan tombol Salin Pesan. |
 | FR-06.07 | Sistem harus menyediakan tombol Buka WhatsApp yang membuka percakapan dengan nomor pelanggan dan teks pesan yang telah disiapkan. |
 | FR-06.08 | Sistem harus menampilkan keterangan bahwa pengiriman dilakukan oleh Admin melalui WhatsApp dan tidak dikonfirmasi oleh CRM. |
+| FR-06.09 | Sistem harus menyediakan welcome message otomatis berisi katalog paket hemat untuk member baru. |
+| FR-06.10 | Sistem harus menyediakan pesan promo QR yang berisi harga khusus paket hemat sesuai campaign. |
+| FR-06.11 | Sistem harus menyediakan pesan kupon tanggal tua yang memuat kode kupon dan tanggal berlaku. |
+| FR-06.12 | Sistem harus mengirim seluruh pesan membership melalui provider SIMULATION dan mencatat status pengiriman pada outbox. |
 
 ### FR-07 — Laporan CRM
 
@@ -352,6 +388,76 @@ Permintaan ulasan pelanggan.
 | FR-08.12 | Sistem harus menggunakan target SLA tetap 60 menit dan tidak menyediakan pengaturan perubahan target SLA. |
 | FR-08.13 | Sistem harus menolak penonaktifan Admin yang masih menjadi PIC tiket berstatus Baru atau Diproses sampai seluruh tiket tersebut dipindahkan ke Admin aktif lain. |
 
+### FR-09 — Membership, QR Promo, dan Kupon Tanggal Tua
+
+Membership terintegrasi dengan data pelanggan. Nomor WhatsApp tetap menjadi identitas unik pelanggan. Satu pelanggan hanya memiliki satu membership. Registrasi ulang dengan nomor yang sama tidak membuat pelanggan atau membership baru; nama terbaru menimpa nama lama.
+
+#### 9.1 Registrasi Member
+
+| ID | Kebutuhan Fungsional |
+| --- | --- |
+| FR-09.01 | Sistem harus menyediakan halaman publik `/daftar-member` yang dapat diakses tanpa login. |
+| FR-09.02 | Halaman registrasi harus menerima parameter campaign QR dan menolak campaign yang tidak terdaftar. |
+| FR-09.03 | Formulir registrasi harus mewajibkan nama minimal dua karakter, nomor WhatsApp valid, dan consent WhatsApp promotional. |
+| FR-09.04 | Sistem harus menormalisasi nomor WhatsApp ke format awalan 62 dan memakai nomor tersebut sebagai identitas unik pelanggan. |
+| FR-09.05 | Registrasi dengan nomor yang sudah ada harus memakai pelanggan lama dan memperbarui nama dengan nama terbaru. |
+| FR-09.06 | Sistem harus menolak registrasi untuk pelanggan yang berstatus ARCHIVED. |
+| FR-09.07 | Sistem harus membuat membership dengan kode unik berformat MBR-YYYY-NNNN dan status ACTIVE. |
+| FR-09.08 | Sistem harus mencatat waktu bergabung, consent, dan sumber registrasi berupa QR_OUTLET, QR_PACKAGING, QR_TABLE, MANUAL, atau SIMULATION. |
+
+#### 9.2 Welcome Message dan Katalog
+
+| ID | Kebutuhan Fungsional |
+| --- | --- |
+| FR-09.09 | Sistem harus mengirim welcome message otomatis setelah membership baru dibuat. |
+| FR-09.10 | Welcome message harus memuat nama member, kode member, dan katalog paket hemat. |
+| FR-09.11 | Katalog harus memuat minimal tiga paket beserta komponen dan harga normal. |
+| FR-09.12 | Welcome message hanya boleh dikirim sekali per membership; registrasi ulang tidak mengirim welcome baru. |
+| FR-09.13 | Halaman hasil registrasi harus menampilkan welcome message dan katalog yang sama dengan isi outbox. |
+
+#### 9.3 QR Campaign dan Promo
+
+| ID | Kebutuhan Fungsional |
+| --- | --- |
+| FR-09.14 | Sistem harus menyediakan tiga campaign QR tetap: QR_OUTLET, QR_PACKAGING, dan QR_TABLE. |
+| FR-09.15 | Setiap campaign harus memiliki label, deskripsi, dan persentase promo. |
+| FR-09.16 | Sistem harus menghasilkan gambar QR yang mengarah ke `/daftar-member?campaign=<kode>`. |
+| FR-09.17 | Admin harus dapat melihat pratinjau dan mengunduh QR campaign dalam format PNG. |
+| FR-09.18 | Sistem harus mengirim pesan promo QR setelah registrasi yang berasal dari campaign valid. |
+| FR-09.19 | Pesan promo QR hanya boleh dikirim sekali per member per campaign. |
+
+#### 9.4 Log Transaksi Manual
+
+| ID | Kebutuhan Fungsional |
+| --- | --- |
+| FR-09.20 | Admin harus dapat mencatat transaksi member dari halaman detail member. |
+| FR-09.21 | Log transaksi hanya memuat tanggal, kanal, catatan, dan Admin pencatat; tidak memuat nominal, pembayaran, atau stok. |
+| FR-09.22 | Tanggal transaksi tidak boleh melebihi waktu sekarang. |
+| FR-09.23 | Sistem harus memperbarui `last_transaction_at` membership dengan tanggal transaksi terbaru. |
+| FR-09.24 | Detail member harus menampilkan riwayat transaksi, pesan, dan kupon. |
+
+#### 9.5 Kupon Tanggal Tua
+
+| ID | Kebutuhan Fungsional |
+| --- | --- |
+| FR-09.25 | Sistem harus menyediakan scheduler yang memeriksa window tiga hari terakhir setiap bulan. |
+| FR-09.26 | Member aktif yang memenuhi `COALESCE(last_transaction_at, joined_at) <= sekarang - 14 hari` harus menerima kupon diskon 10%. |
+| FR-09.27 | Kupon harus memiliki kode unik dengan format BC-TU-YYYYMM-<customerId> dan berlaku 7 hari sejak diterbitkan. |
+| FR-09.28 | Sistem harus membatasi maksimal satu kupon per member per bulan. |
+| FR-09.29 | Proses penerbitan kupon harus idempoten; menjalankan scheduler berkali-kali tidak boleh membuat kupon ganda. |
+| FR-09.30 | Admin harus dapat menjalankan promo tanggal tua secara manual untuk keperluan demo. |
+| FR-09.31 | Admin harus dapat menandai kupon sebagai USED; kupon yang sudah USED atau EXPIRED tidak boleh dipakai ulang. |
+
+#### 9.6 Outbox dan Realtime
+
+| ID | Kebutuhan Fungsional |
+| --- | --- |
+| FR-09.32 | Semua pesan membership harus disimpan pada `member_messages` dengan status QUEUED, SENT, atau FAILED dan provider SIMULATION. |
+| FR-09.33 | Jika halaman simulasi pelanggan terbuka, pesan membership harus didorong melalui event SSE `member_message`. |
+| FR-09.34 | Halaman `/simulasi` harus menerima parameter `phone` dan `name` untuk langsung terhubung ke nomor member. |
+| FR-09.35 | Admin harus menerima event SSE untuk member baru, pesan terkirim, kupon dipakai, dan promo dijalankan. |
+| FR-09.36 | Sistem harus menampilkan statistik total member, member baru bulan ini, member pasif lebih dari 14 hari, serta kupon terbit dan terpakai. |
+
 ## 4. Kebutuhan Nonfungsional (Non-Functional Requirements)
 
 | ID | Kategori | Ketentuan |
@@ -369,10 +475,16 @@ Permintaan ulasan pelanggan.
 | NFR-11 | Maintainability | Kode frontend, backend, dan akses database harus dipisahkan ke dalam modul yang terstruktur. |
 | NFR-12 | Backup | Owner harus dapat mengunduh backup database SQLite dari halaman Pengaturan. |
 | NFR-13 | Data Integrity | Customer ID dan Ticket ID harus unik; nomor WhatsApp pelanggan harus unik; seluruh foreign key harus divalidasi. |
+| NFR-14 | Idempotency | Penerbitan kupon dan pengiriman welcome/promo QR harus idempoten; pengulangan proses tidak boleh membuat data ganda. |
+| NFR-15 | Consent | Pesan promotional hanya boleh dibuat untuk member yang telah memberikan consent. |
+| NFR-16 | Delivery Log | Setiap pesan simulasi WhatsApp harus tercatat pada outbox dengan status dan provider SIMULATION. |
+| NFR-17 | Reliability | Scheduler promo harus berjalan tanpa menahan proses Node tetap hidup saat pengujian dan harus aman dijalankan berulang. |
+| NFR-18 | Security | Endpoint registrasi publik hanya boleh membuat data member sendiri; seluruh endpoint admin membership wajib memeriksa sesi login. |
+| NFR-19 | Transparency | Antarmuka harus menyatakan bahwa pengiriman WhatsApp adalah simulasi dan tidak menggunakan WhatsApp API asli. |
 
 ## 5. Rancangan Database
 
-Database menggunakan SQLite dan terdiri dari empat tabel: users, customers, complaints, dan complaint_activities. Template WhatsApp disimpan sebagai konfigurasi statis di kode aplikasi dan tidak dibuatkan tabel database.
+Database menggunakan SQLite dan terdiri dari delapan tabel: users, customers, complaints, complaint_activities, memberships, member_transactions, member_coupons, dan member_messages. Template WhatsApp statis disimpan sebagai konfigurasi di kode aplikasi dan tidak dibuatkan tabel database.
 
 ### 5.1 Tabel users
 
@@ -439,7 +551,76 @@ Aturan: assigned_to dan created_by harus menunjuk akun ADMIN yang aktif ketika t
 
 Sistem mencatat aktivitas pembuatan tiket, perubahan status, perubahan PIC, dan penambahan catatan. Aktivitas lama tidak dapat diubah atau dihapus melalui UI. Tiket berstatus Baru atau Diproses wajib dipindahkan ke Admin aktif lain sebelum akun PIC sebelumnya dinonaktifkan.
 
-### 5.5 Relasi Antar Tabel
+### 5.5 Tabel memberships
+
+| Field | Tipe SQLite | Constraint | Keterangan |
+| --- | --- | --- | --- |
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | ID internal membership. |
+| customer_id | INTEGER | NOT NULL UNIQUE REFERENCES customers(id) | Pelanggan pemilik membership. |
+| member_code | TEXT | NOT NULL UNIQUE | Kode dengan format MBR-YYYY-NNNN. |
+| status | TEXT | NOT NULL DEFAULT ‘ACTIVE’ CHECK (status IN (‘ACTIVE’,‘INACTIVE’)) | Status membership. |
+| registered_via | TEXT | NOT NULL CHECK (registered_via IN (‘QR_OUTLET’,‘QR_PACKAGING’,‘QR_TABLE’,‘MANUAL’,‘SIMULATION’)) | Sumber registrasi. |
+| campaign_code | TEXT | NULL | Kode campaign QR jika registrasi berasal dari QR. |
+| joined_at | TEXT | NOT NULL | Waktu member bergabung. |
+| welcome_sent_at | TEXT | NULL | Waktu welcome message dikirim; NULL berarti belum dikirim. |
+| last_transaction_at | TEXT | NULL | Tanggal transaksi manual terbaru. |
+| consent_at | TEXT | NOT NULL | Waktu consent diberikan. |
+| created_at | TEXT | NOT NULL | Waktu data dibuat. |
+| updated_at | TEXT | NOT NULL | Waktu data diperbarui. |
+
+Aturan: satu pelanggan hanya memiliki satu membership. Nomor WhatsApp tetap unik pada tabel customers sehingga registrasi ulang tidak membuat pelanggan ganda.
+
+### 5.6 Tabel member_transactions
+
+| Field | Tipe SQLite | Constraint | Keterangan |
+| --- | --- | --- | --- |
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | ID log transaksi. |
+| customer_id | INTEGER | NOT NULL REFERENCES customers(id) | Member terkait. |
+| occurred_at | TEXT | NOT NULL | Tanggal transaksi manual. |
+| channel | TEXT | NOT NULL DEFAULT ‘DIRECT’ CHECK (channel IN (‘DIRECT’,‘GOFOOD’,‘GRABFOOD’,‘OTHER’)) | Kanal pembelian. |
+| notes | TEXT | NOT NULL DEFAULT ’’ | Catatan transaksi. |
+| created_by | INTEGER | NULL REFERENCES users(id) | Admin pencatat. |
+| created_at | TEXT | NOT NULL | Waktu pencatatan. |
+
+Aturan: tabel ini bukan POS. Tidak ada kolom nominal, pembayaran, atau stok. Fungsinya hanya menentukan tanggal aktivitas terakhir member.
+
+### 5.7 Tabel member_coupons
+
+| Field | Tipe SQLite | Constraint | Keterangan |
+| --- | --- | --- | --- |
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | ID kupon. |
+| coupon_code | TEXT | NOT NULL UNIQUE | Kode kupon BC-TU-YYYYMM-<customerId>. |
+| customer_id | INTEGER | NOT NULL REFERENCES customers(id) | Member penerima kupon. |
+| campaign_id | TEXT | NOT NULL | ID campaign, contoh END_MONTH_2026-11. |
+| discount_percent | INTEGER | NOT NULL DEFAULT 10 | Persentase diskon. |
+| status | TEXT | NOT NULL DEFAULT ‘ISSUED’ CHECK (status IN (‘ISSUED’,‘USED’,‘EXPIRED’)) | Status kupon. |
+| issued_at | TEXT | NOT NULL | Waktu kupon diterbitkan. |
+| expires_at | TEXT | NOT NULL | Waktu kedaluwarsa, issued_at + 7 hari. |
+| used_at | TEXT | NULL | Waktu kupon dipakai. |
+| used_by | INTEGER | NULL REFERENCES users(id) | Admin yang menandai kupon dipakai. |
+| created_at | TEXT | NOT NULL | Waktu data dibuat. |
+
+Aturan: kombinasi customer_id dan campaign_id unik sehingga satu member hanya menerima satu kupon per bulan.
+
+### 5.8 Tabel member_messages
+
+| Field | Tipe SQLite | Constraint | Keterangan |
+| --- | --- | --- | --- |
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | ID pesan. |
+| customer_id | INTEGER | NOT NULL REFERENCES customers(id) | Member penerima pesan. |
+| phone | TEXT | NOT NULL | Nomor WhatsApp tujuan pada saat pengiriman. |
+| message_type | TEXT | NOT NULL CHECK (message_type IN (‘WELCOME’,‘QR_PROMO’,‘END_MONTH_COUPON’)) | Jenis pesan membership. |
+| body | TEXT | NOT NULL | Isi pesan. |
+| status | TEXT | NOT NULL DEFAULT ‘SENT’ CHECK (status IN (‘QUEUED’,‘SENT’,‘FAILED’)) | Status pengiriman simulasi. |
+| provider | TEXT | NOT NULL DEFAULT ‘SIMULATION’ | Provider pengiriman; versi ini selalu SIMULATION. |
+| campaign_code | TEXT | NULL | Campaign terkait, jika ada. |
+| coupon_id | INTEGER | NULL REFERENCES member_coupons(id) | Kupon terkait, jika ada. |
+| created_at | TEXT | NOT NULL | Waktu pesan dibuat. |
+| sent_at | TEXT | NULL | Waktu pesan ditandai terkirim. |
+
+Aturan: seluruh pesan membership masuk outbox. Jika halaman pelanggan terbuka, pesan juga didorong melalui SSE.
+
+### 5.9 Relasi Antar Tabel
 
 | Relasi | Kardinalitas | Penjelasan |
 | --- | --- | --- |
@@ -448,14 +629,19 @@ Sistem mencatat aktivitas pembuatan tiket, perubahan status, perubahan PIC, dan 
 | users → complaints (assigned_to) | 1 : N | Satu Admin dapat menjadi PIC banyak tiket. |
 | complaints → complaint_activities | 1 : N | Satu tiket memiliki banyak catatan aktivitas. |
 | users → complaint_activities | 1 : N | Satu pengguna dapat mencatat banyak aktivitas. |
+| customers → memberships | 1 : 1 | Satu pelanggan memiliki maksimal satu membership. |
+| customers → member_transactions | 1 : N | Satu member dapat memiliki banyak log transaksi manual. |
+| customers → member_coupons | 1 : N | Satu member dapat menerima banyak kupon lintas bulan. |
+| customers → member_messages | 1 : N | Satu member dapat menerima banyak pesan simulasi. |
+| member_coupons → member_messages | 1 : N | Satu kupon dapat direferensikan oleh pesan kupon. |
 
-### 5.6 ERD
+### 5.10 ERD
 
 Entity Relationship Diagram CRM Bro Chicken
 
-Diagram menunjukkan empat tabel dan relasi foreign key. Tabel users memiliki dua relasi ke complaints, yaitu sebagai pembuat tiket (created_by) dan PIC (assigned_to).
+Diagram menunjukkan delapan tabel dan relasi foreign key. Tabel users memiliki dua relasi ke complaints, yaitu sebagai pembuat tiket (created_by) dan PIC (assigned_to). Tabel customers terhubung ke complaints, memberships, member_transactions, member_coupons, dan member_messages.
 
-### 5.7 Index Database
+### 5.11 Index Database
 
 Database wajib memiliki index berikut untuk mendukung pencarian dan pemfilteran:
 
@@ -466,10 +652,14 @@ Database wajib memiliki index berikut untuk mendukung pencarian dan pemfilteran:
 | idx_complaints_status_created | complaints | status, created_at |
 | idx_complaints_assigned_to | complaints | assigned_to |
 | idx_activities_complaint_created | complaint_activities | complaint_id, created_at |
+| idx_memberships_status_transaction | memberships | status, last_transaction_at |
+| idx_member_transactions_customer_occurred | member_transactions | customer_id, occurred_at |
+| idx_member_messages_customer_created | member_messages | customer_id, created_at |
+| idx_member_coupons_customer_status | member_coupons | customer_id, status |
 
 ## 6. Tahap Implementasi yang Ditetapkan
 
-Seluruh fitur dalam SRS wajib selesai pada akhir P12. Pembagian berikut menetapkan urutan pengerjaan, bukan pilihan fitur.
+Seluruh fitur dalam SRS wajib selesai pada akhir P13. Pembagian berikut menetapkan urutan pengerjaan, bukan pilihan fitur.
 
 ### 6.1 P11 — Prototype Inti
 
@@ -479,7 +669,7 @@ Membuat layout website, sidebar, topbar, dan halaman login.
 
 Mengimplementasikan login, logout, sesi, dan hak akses Owner/Admin.
 
-Membuat database empat tabel sesuai Bagian 5.
+Membuat database inti empat tabel sesuai Bagian 5.
 
 Mengimplementasikan daftar, pencarian, filter, detail, tambah, edit, arsip, dan aktivasi kembali pelanggan.
 
@@ -511,6 +701,28 @@ Melakukan pengujian seluruh kriteria penerimaan pada Bagian 7.
 
 Memperbaiki seluruh kesalahan yang ditemukan dan menyiapkan dokumentasi demo.
 
+### 6.3 P13 — Membership dan Promo
+
+Menambahkan tabel memberships, member_transactions, member_coupons, dan member_messages.
+
+Mengimplementasikan halaman publik `/daftar-member` dengan validasi campaign QR dan consent.
+
+Mengimplementasikan registrasi member, normalisasi nomor, dan pembaruan nama pelanggan lama tanpa duplikasi.
+
+Mengimplementasikan welcome message, katalog paket hemat, dan promo QR melalui outbox simulasi.
+
+Mengimplementasikan log transaksi manual dan pembaruan `last_transaction_at`.
+
+Mengimplementasikan scheduler kupon tanggal tua, aturan 14 hari, diskon 10%, dan masa berlaku 7 hari.
+
+Mengimplementasikan halaman admin Member & Promo, QR campaign, outbox pesan, dan aksi pemakaian kupon.
+
+Mengimplementasikan integrasi SSE `member_message` pada halaman `/simulasi`.
+
+Melakukan pengujian membership dan memperluas kriteria penerimaan dari 15 menjadi 20.
+
+Memperbarui dokumentasi SRS, README, dan bukti pengujian.
+
 ## 7. Kriteria Penerimaan Sistem
 
 Sistem dinyatakan memenuhi SRS apabila seluruh butir berikut lulus pengujian.
@@ -532,30 +744,39 @@ Sistem dinyatakan memenuhi SRS apabila seluruh butir berikut lulus pengujian.
 | 13 | Laporan | Laporan menampilkan metrik periode yang benar dan dapat diekspor ke CSV. |
 | 14 | Manajemen akun | Owner dapat membuat, mengubah, menonaktifkan, dan mengaktifkan akun Admin. |
 | 15 | Backup | Owner dapat mengunduh file database SQLite yang dapat dibuka kembali. |
+| 16 | Struktur membership | Tabel memberships, member_transactions, member_coupons, dan member_messages tersedia dengan foreign key dan index yang benar. |
+| 17 | QR campaign | Tiga campaign QR tersedia beserta katalog paket hemat, gambar QR, dan tautan registrasi. |
+| 18 | Registrasi member | Nomor WhatsApp unik tidak membuat pelanggan ganda; nama terbaru menimpa nama lama; welcome message hanya dikirim sekali. |
+| 19 | Kupon tanggal tua | Member pasif lebih dari 14 hari menerima kupon 10% berlaku 7 hari; member aktif dan member baru tidak menerima kupon; proses idempoten. |
+| 20 | Outbox simulasi | Seluruh pesan membership tersimpan dengan provider SIMULATION dan status yang valid, serta dapat didorong melalui SSE. |
 
 ## 8. Batasan Sistem (Di Luar Scope)
 
 Fungsi berikut tidak dibangun pada versi CRM Bro Chicken ini:
 
-POS, pencatatan transaksi penjualan, pembayaran, dan pengelolaan stok.
+POS, pencatatan penjualan, pembayaran, dan pengelolaan stok.
 
 Integrasi API GoFood dan GrabFood. Sumber pelanggan dicatat manual oleh Admin.
 
-Pengiriman WhatsApp otomatis, WhatsApp Business API, chatbot, dan broadcast massal.
+Pengiriman WhatsApp asli melalui WhatsApp Business API atau Meta Cloud API. Seluruh pengiriman membership pada versi ini adalah simulasi yang disimpan pada outbox dan didorong melalui SSE.
 
-Pengelolaan template WhatsApp secara dinamis. Empat template ditetapkan di kode aplikasi.
+Chatbot otomatis untuk penanganan keluhan. AI Triage pada halaman simulasi hanya alat demonstrasi dan tidak menggantikan Admin.
+
+Pengelolaan template WhatsApp secara dinamis. Empat template statis ditetapkan di kode aplikasi; tiga pesan membership dihasilkan sistem.
 
 Program loyalitas poin, stamp, penukaran reward, dan perhitungan poin dari transaksi.
 
-Pengelolaan kampanye promosi dan segmentasi pemasaran massal.
+Segmentasi pemasaran massal dan broadcast ke pelanggan di luar program membership. Promo QR dan kupon tanggal tua hanya dikirim ke member yang telah memberikan consent.
 
-Aplikasi mobile native dan portal pelanggan.
+Aplikasi mobile native dan portal pelanggan penuh. Yang termasuk scope hanya halaman registrasi publik dan halaman simulasi WhatsApp.
 
-Role selain Owner dan Admin.
+Role selain Owner dan Admin. Member publik bukan role login.
 
 Multi-cabang dan pemisahan database berdasarkan cabang.
 
 Penghapusan permanen pelanggan melalui antarmuka aplikasi.
+
+Perhitungan omzet, laporan penjualan, atau integrasi transaksi dengan kasir. Log transaksi member hanya mencatat tanggal aktivitas.
 
 ## 9. Ketentuan Teknis dan Operasional
 
@@ -563,7 +784,7 @@ Frontend wajib menggunakan HTML, CSS, dan Vanilla JavaScript.
 
 Backend wajib menggunakan Node.js dan Express.js.
 
-Database wajib menggunakan SQLite untuk prototype P11–P12.
+Database wajib menggunakan SQLite untuk prototype P11–P13.
 
 Aplikasi berjalan secara lokal selama pengembangan dan demonstrasi kelas.
 
@@ -581,11 +802,21 @@ Akun Owner awal dibuat melalui proses inisialisasi aplikasi. Akun Admin berikutn
 
 File backup hanya dapat diunduh Owner.
 
+Halaman publik `/daftar-member` dan `/simulasi` tidak memerlukan login. Kedua halaman hanya boleh mengakses data member sendiri dan tidak boleh membuka endpoint admin.
+
+Seluruh pesan membership menggunakan provider SIMULATION. Tidak ada kredensial WhatsApp API pada versi ini. Adapter provider dapat ditambahkan tanpa mengubah alur bisnis.
+
+Scheduler promo berjalan di proses server, memakai timer yang tidak menahan proses Node tetap hidup, dan hanya memeriksa window tiga hari terakhir bulan. Admin tetap dapat menjalankan promo secara manual untuk demo.
+
+Consent member disimpan pada `memberships.consent_at`. Member tanpa consent tidak boleh menerima pesan promotional.
+
+Kupon tanggal tua dihitung dari `COALESCE(last_transaction_at, joined_at)`. Member yang belum pernah bertransaksi memakai tanggal bergabung sebagai dasar perhitungan.
+
 ## 10. Penutup
 
-SRS versi 1.2 ini menjadi baseline final kebutuhan CRM Bro Chicken untuk pengembangan P11–P12. Fitur, role, alur status, SLA, tabel database, dan batasan scope telah ditetapkan pada dokumen ini. Perubahan terhadap baseline harus dicatat sebagai revisi SRS baru dan disepakati oleh kelompok sebelum diimplementasikan.
+SRS versi 2.0 ini menjadi baseline kebutuhan CRM Bro Chicken untuk pengembangan P11–P13. Fitur, role, alur status, SLA, membership, promo QR, kupon tanggal tua, struktur database, dan batasan scope telah ditetapkan pada dokumen ini. Perubahan terhadap baseline harus dicatat sebagai revisi SRS baru dan disepakati oleh kelompok sebelum diimplementasikan.
 
-Akhir Dokumen — SRS CRM Bro Chicken Versi 1.2
+Akhir Dokumen — SRS CRM Bro Chicken Versi 2.0
 
 
 ## Lampiran Gambar dari Dokumen Word

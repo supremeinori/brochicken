@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daftar Member Bro Chicken - Paket Hemat & Promo</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="icon" type="image/png" href="/images/logo.png">
+  <style>
+    body {
+      background-color: #0F172A;
+      background-image:
+        radial-gradient(circle at 12% 18%, rgba(234, 88, 12, 0.22), transparent 42%),
+        radial-gradient(circle at 88% 82%, rgba(21, 128, 61, 0.16), transparent 45%);
+      min-height: 100vh;
+    }
+
+    .member-page {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 28px 20px 56px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    .member-intro {
+      color: #E2E8F0;
+      padding-top: 12px;
+    }
+
+    .member-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .member-brand img {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      background: #FFFFFF;
+      border-radius: var(--radius-md);
+      padding: 5px;
+    }
+
+    .member-brand h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #FFFFFF;
+      line-height: 1.2;
+    }
+
+    .member-brand p {
+      font-size: 12px;
+      color: #94A3B8;
+      font-weight: 500;
+    }
+
+    .member-headline {
+      font-size: 34px;
+      line-height: 1.15;
+      font-weight: 700;
+      color: #FFFFFF;
+      letter-spacing: -0.02em;
+      margin-bottom: 14px;
+    }
+
+    .member-headline span {
+      color: #FB923C;
+    }
+
+    .member-sub {
+      font-size: 14px;
+      color: #CBD5E1;
+      max-width: 460px;
+      margin-bottom: 28px;
+    }
+
+    .member-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 460px;
+    }
+
+    .member-step {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .member-step-num {
+      flex: 0 0 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #EA580C;
+      color: #FFFFFF;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .member-step-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+
+    .member-step-desc {
+      font-size: 12.5px;
+      color: #94A3B8;
+      margin-top: 1px;
+    }
+
+    .member-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: var(--radius-lg);
+      box-shadow: 0 24px 48px -18px rgba(2, 6, 23, 0.55);
+      overflow: hidden;
+    }
+
+    .member-card-head {
+      padding: 20px 24px;
+      border-bottom: 1px solid #E2E8F0;
+      background: #F8FAFC;
+    }
+
+    .member-card-head h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0F172A;
+    }
+
+    .member-card-head p {
+      font-size: 12.5px;
+      color: #64748B;
+      margin-top: 2px;
+    }
+
+    .member-card-body {
+      padding: 22px 24px 24px;
+    }
+
+    .member-field {
+      margin-bottom: 16px;
+    }
+
+    .member-label {
+      display: block;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+
+    .member-consent {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 12px;
+      border: 1px solid #E2E8F0;
+      border-radius: var(--radius-md);
+      background: #F8FAFC;
+      margin-bottom: 16px;
+    }
+
+    .member-consent input {
+      margin-top: 3px;
+      width: 16px;
+      height: 16px;
+      accent-color: #EA580C;
+      flex: 0 0 auto;
+    }
+
+    .member-consent label {
+      font-size: 12px;
+      color: #475569;
+      line-height: 1.55;
+    }
+
+    .member-submit {
+      width: 100%;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .member-note {
+      font-size: 11.5px;
+      color: #64748B;
+      margin-top: 12px;
+      line-height: 1.55;
+      padding: 10px 12px;
+      background: #FFFBEB;
+      border: 1px solid #FDE68A;
+      border-radius: var(--radius-md);
+    }
+
+    .member-alert {
+      padding: 12px 14px;
+      border-radius: var(--radius-md);
+      font-size: 12.5px;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .member-alert-error {
+      background: #FEF2F2;
+      border: 1px solid #FECACA;
+      color: #B91C1C;
+    }
+
+    .member-alert-info {
+      background: #F0F9FF;
+      border: 1px solid #BAE6FD;
+      color: #0369A1;
+    }
+
+    .member-success {
+      display: none;
+    }
+
+    .member-success.visible {
+      display: block;
+    }
+
+    .member-success .member-card-body {
+      padding: 24px;
+    }
+
+    .success-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #F0FDF4;
+      border: 1px solid #BBF7D0;
+      color: #15803D;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+
+    .success-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #0F172A;
+      margin-bottom: 4px;
+    }
+
+    .success-sub {
+      font-size: 13px;
+      color: #64748B;
+      margin-bottom: 18px;
+    }
+
+    .member-code-box {
+      background: #0F172A;
+      color: #FFFFFF;
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .member-code-box .label {
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94A3B8;
+      font-weight: 600;
+    }
+
+    .member-code-box .code {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #FB923C;
+    }
+
+    .catalog-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748B;
+      margin-bottom: 10px;
+    }
+
+    .catalog-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .catalog-item {
+      border: 1px solid #E2E8F0;
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .catalog-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #0F172A;
+    }
+
+    .catalog-item-items {
+      font-size: 11.5px;
+      color: #64748B;
+      margin-top: 1px;
+    }
+
+    .catalog-price {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .catalog-price .normal {
+      font-size: 12px;
+      color: #94A3B8;
+      text-decoration: line-through;
+    }
+
+    .catalog-price .promo {
+      font-size: 14px;
+      font-weight: 700;
+      color: #EA580C;
+    }
+
+    .catalog-price .now {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0F172A;
+    }
+
+    .wa-preview {
+      background: #EFEAE2;
+      border: 1px solid #CBD5E1;
+      border-radius: var(--radius-md);
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+
+    .wa-preview-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748B;
+      margin-bottom: 8px;
+    }
+
+    .wa-preview-bubble {
+      background: #FFFFFF;
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-size: 12.5px;
+      color: #334155;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      border-left: 3px solid #15803D;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+
+    .success-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .success-actions .btn {
+      text-decoration: none;
+    }
+
+    .member-footer {
+      grid-column: 1 / -1;
+      text-align: center;
+      color: #64748B;
+      font-size: 11.5px;
+      padding-top: 8px;
+    }
+
+    .member-footer a {
+      color: #FB923C;
+      text-decoration: underline;
+    }
+
+    @media (max-width: 860px) {
+      .member-page {
+        grid-template-columns: 1fr;
+        gap: 22px;
+        padding-top: 20px;
+      }
+
+      .member-headline {
+        font-size: 27px;
+      }
+
+      .member-steps {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="member-page">
+    <section class="member-intro">
+      <div class="member-brand">
+        <img src="/images/logo.png" alt="Bro Chicken Logo">
+        <div>
+          <h1>Bro Chicken</h1>
+          <p>Membership &amp; Promo Paket Hemat</p>
+        </div>
+      </div>
+
+      <h2 class="member-headline">Daftar member, dapat <span>paket hemat</span> dan kupon tanggal tua.</h2>
+      <p class="member-sub">
+        Cukup isi nama dan nomor WhatsApp. Katalog paket hemat langsung dikirim ke layar ini.
+        Saat masuk akhir bulan, member yang lama tidak bertransaksi otomatis mendapat kupon diskon 10%.
+      </p>
+
+      <div class="member-steps">
+        <div class="member-step">
+          <div class="member-step-num">1</div>
+          <div>
+            <div class="member-step-title">Pindai QR dari outlet, kemasan, atau meja</div>
+            <div class="member-step-desc">Setiap QR membuka promo paket hemat yang sama dengan kode campaign berbeda.</div>
+          </div>
+        </div>
+        <div class="member-step">
+          <div class="member-step-num">2</div>
+          <div>
+            <div class="member-step-title">Isi nama dan nomor WhatsApp</div>
+            <div class="member-step-desc">Nomor WhatsApp menjadi identitas member. Nomor yang sama tidak membuat data ganda.</div>
+          </div>
+        </div>
+        <div class="member-step">
+          <div class="member-step-num">3</div>
+          <div>
+            <div class="member-step-title">Terima welcome message dan katalog</div>
+            <div class="member-step-desc">Pesan tampil sebagai simulasi WhatsApp. Tidak ada pengiriman ke nomor asli.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="member-card">
+        <div class="member-card-head">
+          <h2 id="form-title">Formulir Pendaftaran Member</h2>
+          <p id="form-subtitle">Isi data di bawah untuk membuka paket hemat Bro Chicken.</p>
+        </div>
+
+        <div class="member-card-body" id="form-body">
+          <div id="campaign-info" class="member-alert member-alert-info" style="display: none;"></div>
+          <div id="form-error" class="member-alert member-alert-error" style="display: none;"></div>
+
+          <form id="member-form" onsubmit="handleRegister(event)">
+            <div class="member-field">
+              <label class="member-label" for="member-name">Nama Lengkap</label>
+              <input type="text" id="member-name" class="form-control" placeholder="Contoh: Rian Pratama" minlength="2" maxlength="80" required autocomplete="name">
+            </div>
+
+            <div class="member-field">
+              <label class="member-label" for="member-phone">Nomor WhatsApp</label>
+              <input type="tel" id="member-phone" class="form-control" placeholder="Contoh: 081299887711" required autocomplete="tel">
+              <div class="form-helper" style="margin-top: 4px;">Gunakan nomor aktif. Nomor yang sudah terdaftar akan memakai data pelanggan lama.</div>
+            </div>
+
+            <div class="member-consent">
+              <input type="checkbox" id="member-consent" required>
+              <label for="member-consent">
+                Saya setuju menerima pesan WhatsApp simulasi berisi katalog paket hemat, promo QR,
+                dan kupon tanggal tua dari Bro Chicken.
+              </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary member-submit" id="member-submit">
+              Daftar Member &amp; Lihat Katalog
+            </button>
+          </form>
+
+          <div class="member-note">
+            <strong>Mode simulasi:</strong> pesan WhatsApp disimpan di database CRM dan ditampilkan di layar ini.
+            Tidak ada pesan yang dikirim ke aplikasi WhatsApp asli.
+          </div>
+        </div>
+      </div>
+
+      <div class="member-card member-success" id="success-card" style="margin-top: 18px;">
+        <div class="member-card-head">
+          <h2>Pendaftaran Berhasil</h2>
+          <p>Simulasi welcome message WhatsApp sudah dibuat.</p>
+        </div>
+        <div class="member-card-body">
+          <span class="success-badge">&check; Member Aktif</span>
+          <div class="success-title" id="success-name">Selamat datang!</div>
+          <div class="success-sub" id="success-sub">Katalog paket hemat sudah tersedia.</div>
+
+          <div class="member-code-box">
+            <div>
+              <div class="label">Kode Member</div>
+              <div class="code" id="success-code">-</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="label">Status</div>
+              <div style="font-size: 12.5px; font-weight: 600; color: #BBF7D0;">Aktif</div>
+            </div>
+          </div>
+
+          <div class="catalog-title">Katalog Paket Hemat</div>
+          <div class="catalog-list" id="success-catalog"></div>
+
+          <div class="wa-preview">
+            <div class="wa-preview-label">Pesan WhatsApp Simulasi</div>
+            <div class="wa-preview-bubble" id="success-message"></div>
+          </div>
+
+          <div class="success-actions">
+            <a class="btn btn-primary" id="open-simulation" href="/simulasi">
+              Buka WhatsApp Simulasi
+            </a>
+            <button class="btn btn-secondary" type="button" onclick="resetForm()">Daftarkan Nomor Lain</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="member-footer">
+      Bro Chicken CRM &bull; <a href="/simulasi">Buka simulasi WhatsApp pelanggan</a> &bull; Demo lokal tanpa WhatsApp API asli
+    </div>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const campaignCode = params.get('campaign');
+    let campaign = null;
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatRupiah(value) {
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: 0
+      }).format(value);
+    }
+
+    function showError(message) {
+      const el = document.getElementById('form-error');
+      el.innerText = message;
+      el.style.display = 'block';
+    }
+
+    function clearError() {
+      const el = document.getElementById('form-error');
+      el.innerText = '';
+      el.style.display = 'none';
+    }
+
+    async function loadCampaign() {
+      if (!campaignCode) {
+        const info = document.getElementById('campaign-info');
+        info.style.display = 'block';
+        info.innerText = 'Pendaftaran dibuka tanpa QR campaign. Paket hemat tetap bisa dilihat setelah daftar.';
+        return;
+      }
+      try {
+        const res = await fetch('/api/membership/public/campaign/' + encodeURIComponent(campaignCode));
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Campaign QR tidak valid.');
+        }
+        campaign = json.data;
+        const info = document.getElementById('campaign-info');
+        info.style.display = 'block';
+        info.innerHTML = `<strong>${escapeHtml(campaign.label)}</strong><br>${escapeHtml(campaign.description)}`;
+        document.getElementById('form-subtitle').innerText = 'Formulir pendaftaran dari ' + campaign.label + '.';
+      } catch (err) {
+        showError(err.message + ' Hubungi admin Bro Chicken untuk meminta QR terbaru.');
+      }
+    }
+
+    async function handleRegister(event) {
+      event.preventDefault();
+      clearError();
+
+      const name = document.getElementById('member-name').value.trim();
+      const phone = document.getElementById('member-phone').value.trim();
+      const consent = document.getElementById('member-consent').checked;
+      const submitBtn = document.getElementById('member-submit');
+
+      if (!consent) {
+        showError('Persetujuan WhatsApp promotional wajib dicentang.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Memproses pendaftaran...';
+
+      try {
+        const res = await fetch('/api/membership/public/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            phone,
+            campaign: campaignCode || null,
+            consent
+          })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Pendaftaran gagal.');
+        }
+        renderSuccess(json.data);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Daftar Member & Lihat Katalog';
+      }
+    }
+
+    function renderSuccess(data) {
+      const customer = data.customer;
+      const membership = data.membership;
+      const catalog = data.catalog || [];
+      const welcome = (data.messages || []).find(m => m.message_type === 'WELCOME')
+        || (data.messages || []).find(m => m.message_type === 'QR_PROMO');
+
+      document.getElementById('form-body').style.display = 'none';
+      const successCard = document.getElementById('success-card');
+      successCard.classList.add('visible');
+
+      document.getElementById('success-name').innerText = 'Selamat datang, ' + customer.name + '!';
+      document.getElementById('success-sub').innerText = data.membership_created
+        ? 'Membership berhasil dibuat. Welcome message simulasi sudah disiapkan.'
+        : 'Data member diperbarui. Welcome message hanya dikirim sekali per membership.';
+      document.getElementById('success-code').innerText = membership.member_code;
+
+      document.getElementById('success-catalog').innerHTML = catalog.map(item => `
+        <div class="catalog-item">
+          <div>
+            <div class="catalog-item-name">${escapeHtml(item.name)}</div>
+            <div class="catalog-item-items">${escapeHtml(item.items)}</div>
+          </div>
+          <div class="catalog-price">
+            ${item.promo_price
+              ? `<div class="normal">${formatRupiah(item.price)}</div><div class="promo">${formatRupiah(item.promo_price)}</div>`
+              : `<div class="now">${formatRupiah(item.price)}</div>`}
+          </div>
+        </div>
+      `).join('');
+
+      document.getElementById('success-message').innerText = welcome
+        ? welcome.body
+        : 'Welcome message sudah pernah dikirim untuk member ini. Buka simulasi WhatsApp untuk melihat riwayat pesan.';
+
+      const simUrl = '/simulasi?phone=' + encodeURIComponent(customer.phone) + '&name=' + encodeURIComponent(customer.name);
+      document.getElementById('open-simulation').href = simUrl;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetForm() {
+      document.getElementById('member-form').reset();
+      document.getElementById('form-body').style.display = 'block';
+      document.getElementById('success-card').classList.remove('visible');
+      clearError();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    window.addEventListener('DOMContentLoaded', loadCampaign);
+  </script>
+</body>
+</html>

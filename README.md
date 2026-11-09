@@ -2,7 +2,7 @@
 
 Aplikasi CRM internal berbasis web untuk bisnis ayam goreng **Bro Chicken**, dirancang khusus untuk memusatkan basis data pelanggan, mencatat dan menindaklanjuti keluhan operasional (SLA target 60 menit), serta memfasilitasi komunikasi pelanggan menggunakan template WhatsApp resmi.
 
-Dikembangkan sesuai dokumen spesifikasi **Software Requirements Specification (SRS) Versi 1.2** dan rancangan antarmuka **13 Layar FigCraft**.
+Dikembangkan sesuai dokumen spesifikasi **Software Requirements Specification (SRS) Versi 2.0** dan rancangan antarmuka **13 Layar FigCraft**.
 
 ---
 
@@ -35,11 +35,14 @@ Server akan aktif di: **`http://localhost:3000`**
 
 ### C. Menjalankan Pengujian Kriteria Penerimaan SRS
 ```bash
-# Uji 15 Kriteria Penerimaan Sistem (SRS Bagian 7)
+# Uji 20 Kriteria Penerimaan Sistem (SRS Bagian 7)
 npm test
 
-# Uji Integrasi Server & Seluruh Endpoint API
+# Uji integrasi server & seluruh endpoint API
 node tests/server.test.js
+
+# Uji membership, QR promo, transaksi manual, dan kupon tanggal tua
+npm run test:membership
 
 # Uji 2 POV Real-Time (SSE Admin & Pelanggan)
 npm run test:realtime
@@ -97,3 +100,12 @@ Sistem telah diinisialisasi otomatis dengan data awal (*auto-seed*):
    - Balasan manual admin (Human-in-the-Loop) langsung muncul di layar pelanggan melalui Server-Sent Events.
    - Countdown SLA 60 menit berjalan langsung dan status tiket ikut tersinkron setelah admin merespons.
    - Nomor telepon menjadi identitas unik pelanggan: nomor yang sama tidak membuat data baru, dan nama terbaru otomatis memperbarui profil lama.
+9. **Membership & Promo Tanggal Tua:**
+   - Halaman publik `/daftar-member` untuk registrasi member dari QR outlet, kemasan, atau meja.
+   - Nomor WhatsApp tetap unik; registrasi ulang memakai pelanggan lama dan memperbarui nama terbaru.
+   - Welcome message simulasi berisi katalog paket hemat, hanya dikirim sekali per membership.
+   - Tiga campaign QR: `QR_OUTLET`, `QR_PACKAGING`, dan `QR_TABLE`, lengkap dengan unduhan QR PNG.
+   - Log transaksi manual tanpa POS: tanggal, kanal, dan catatan. Tidak ada nominal, pembayaran, atau stok.
+   - Kupon tanggal tua 10% untuk member yang tidak bertransaksi lebih dari 14 hari, terbit pada 3 hari terakhir bulan, berlaku 7 hari.
+   - Scheduler idempoten, tombol manual untuk demo, dan penandaan kupon `USED`.
+   - Semua pesan masuk outbox `member_messages` dengan provider `SIMULATION` dan didorong ke `/simulasi?phone=...` melalui SSE.

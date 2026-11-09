@@ -66,11 +66,69 @@ function initSchema(db) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS memberships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL UNIQUE REFERENCES customers(id),
+      member_code TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE')),
+      registered_via TEXT NOT NULL CHECK (registered_via IN ('QR_OUTLET', 'QR_PACKAGING', 'QR_TABLE', 'MANUAL', 'SIMULATION')),
+      campaign_code TEXT NULL,
+      joined_at TEXT NOT NULL,
+      welcome_sent_at TEXT NULL,
+      last_transaction_at TEXT NULL,
+      consent_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS member_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      occurred_at TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'DIRECT' CHECK (channel IN ('DIRECT', 'GOFOOD', 'GRABFOOD', 'OTHER')),
+      notes TEXT NOT NULL DEFAULT '',
+      created_by INTEGER NULL REFERENCES users(id),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS member_coupons (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      coupon_code TEXT NOT NULL UNIQUE,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      campaign_id TEXT NOT NULL,
+      discount_percent INTEGER NOT NULL DEFAULT 10,
+      status TEXT NOT NULL DEFAULT 'ISSUED' CHECK (status IN ('ISSUED', 'USED', 'EXPIRED')),
+      issued_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT NULL,
+      used_by INTEGER NULL REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      UNIQUE (customer_id, campaign_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS member_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      phone TEXT NOT NULL,
+      message_type TEXT NOT NULL CHECK (message_type IN ('WELCOME', 'QR_PROMO', 'END_MONTH_COUPON')),
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'SENT' CHECK (status IN ('QUEUED', 'SENT', 'FAILED')),
+      provider TEXT NOT NULL DEFAULT 'SIMULATION',
+      campaign_code TEXT NULL,
+      coupon_id INTEGER NULL REFERENCES member_coupons(id),
+      created_at TEXT NOT NULL,
+      sent_at TEXT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
     CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
     CREATE INDEX IF NOT EXISTS idx_complaints_status_created ON complaints(status, created_at);
     CREATE INDEX IF NOT EXISTS idx_complaints_assigned_to ON complaints(assigned_to);
     CREATE INDEX IF NOT EXISTS idx_activities_complaint_created ON complaint_activities(complaint_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_memberships_status_transaction ON memberships(status, last_transaction_at);
+    CREATE INDEX IF NOT EXISTS idx_member_transactions_customer_occurred ON member_transactions(customer_id, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_member_messages_customer_created ON member_messages(customer_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_member_coupons_customer_status ON member_coupons(customer_id, status);
   `);
 }
 
@@ -110,6 +168,24 @@ function getNextTicketCode(db) {
   return `${prefix}${String(nextSeq).padStart(4, '0')}`;
 }
 
+function getNextMemberCode(db) {
+  const year = new Date().getFullYear();
+  const prefix = `MBR-${year}-`;
+  const row = db.prepare(
+    `SELECT member_code FROM memberships WHERE member_code LIKE ? ORDER BY member_code DESC LIMIT 1`
+  ).get(`${prefix}%`);
+
+  let nextSeq = 1;
+  if (row && row.member_code) {
+    const parts = row.member_code.split('-');
+    if (parts.length === 3) {
+      const num = parseInt(parts[2], 10);
+      if (!isNaN(num)) nextSeq = num + 1;
+    }
+  }
+  return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+}
+
 function normalizePhone(input) {
   if (!input) return '';
   let cleaned = String(input).replace(/[^\d+]/g, '');
@@ -124,5 +200,6 @@ module.exports = {
   getDb,
   getNextCustomerCode,
   getNextTicketCode,
+  getNextMemberCode,
   normalizePhone
 };

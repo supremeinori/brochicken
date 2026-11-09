@@ -1119,3 +1119,155 @@ textarea.form-control {
   border-color: #F97316;
   color: #C2410C;
 }
+
+/* -------------------------------------------------------------
+   MEMBERSHIP, QR PROMO & KUPON TANGGAL TUA
+------------------------------------------------------------- */
+.membership-banner {
+  background-color: #0F172A;
+  color: #FFFFFF;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.membership-banner-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.membership-banner-sub {
+  font-size: 12px;
+  color: #94A3B8;
+  margin-top: 3px;
+  max-width: 720px;
+}
+
+.membership-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.campaign-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.campaign-card {
+  display: flex;
+  gap: 14px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  align-items: flex-start;
+}
+
+.campaign-qr {
+  width: 92px;
+  height: 92px;
+  flex: 0 0 92px;
+  border: 1px solid #E2E8F0;
+  border-radius: var(--radius-sm);
+  background: #FFFFFF;
+}
+
+.campaign-body {
+  min-width: 0;
+}
+
+.campaign-code {
+  font-family: monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #0369A1;
+  letter-spacing: 0.04em;
+}
+
+.campaign-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-top: 1px;
+}
+
+.campaign-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+
+.campaign-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.outbox-body {
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.5;
+  max-height: 88px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  min-width: 260px;
+}
+
+.member-detail-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  font-size: 12.5px;
+  color: var(--text-main);
+}
+
+.meta-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.member-detail-section {
+  margin-bottom: 18px;
+}
+
+.member-detail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.member-detail-section-head h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+@media (max-width: 980px) {
+  .membership-grid {
+    grid-template-columns: 1fr;
+  }
+}

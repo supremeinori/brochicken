@@ -214,6 +214,16 @@
         }
       });
 
+      // Menerima pesan sistem membership: welcome, promo QR, kupon tanggal tua.
+      sseSource.addEventListener('member_message', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          addMemberMessage(data.message_type, data.message, data.coupon_code);
+        } catch (err) {
+          console.error('Error parse member_message SSE:', err);
+        }
+      });
+
       sseSource.onerror = () => {
         document.getElementById('sse-status-label').innerHTML = `<span style="color: #F87171;">&bull; Menghubungkan ulang ke server...</span>`;
       };
@@ -280,6 +290,32 @@
     function scrollToBottom() {
       const chatStream = document.getElementById('chat-stream');
       chatStream.scrollTop = chatStream.scrollHeight;
+    }
+
+    // Bubble pesan sistem membership (welcome, promo QR, kupon)
+    function addMemberMessage(messageType, text, couponCode) {
+      const chatStream = document.getElementById('chat-stream');
+      const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      const labels = {
+        WELCOME: 'MEMBERSHIP BRO CHICKEN',
+        QR_PROMO: 'PROMO QR MEMBER',
+        END_MONTH_COUPON: 'KUPON TANGGAL TUA'
+      };
+
+      const bubble = document.createElement('div');
+      bubble.className = 'wa-bubble wa-bubble-ai';
+      bubble.style.borderLeft = '3px solid #15803D';
+      bubble.innerHTML = `
+        <span class="badge-admin-tag" style="background-color: #15803D;">${escapeHtml(labels[messageType] || 'PESAN MEMBERSHIP')}</span>
+        <div class="wa-bubble-sender" style="color: #15803D;">Bro Chicken Membership (Simulasi)</div>
+        <div style="white-space: pre-wrap;">${escapeHtml(text || '')}</div>
+        <div class="wa-time">
+          <span>${timeStr}</span>
+          ${couponCode ? `&bull; <span style="font-weight: 600;">${escapeHtml(couponCode)}</span>` : ''}
+        </div>
+      `;
+      chatStream.appendChild(bubble);
+      scrollToBottom();
     }
 
     // Kirim pesan chat pelanggan ke server
@@ -370,6 +406,17 @@
     });
 
     window.addEventListener('DOMContentLoaded', () => {
+      // Prefill dari tautan registrasi member: /simulasi?phone=62...&name=...
+      const params = new URLSearchParams(window.location.search);
+      const phoneParam = params.get('phone');
+      const nameParam = params.get('name');
+      if (phoneParam) {
+        document.getElementById('cust-phone').value = phoneParam;
+        currentPhone = phoneParam;
+      }
+      if (nameParam) {
+        document.getElementById('cust-name').value = nameParam;
+      }
       loadPresets();
       initSSE();
     });
