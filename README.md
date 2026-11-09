@@ -96,3 +96,4 @@ Sistem telah diinisialisasi otomatis dengan data awal (*auto-seed*):
    - POV Admin di menu **Simulasi WA (AI)** menerima chat masuk secara live, lengkap dengan analisis AI Triage dan tiket CRM otomatis.
    - Balasan manual admin (Human-in-the-Loop) langsung muncul di layar pelanggan melalui Server-Sent Events.
    - Countdown SLA 60 menit berjalan langsung dan status tiket ikut tersinkron setelah admin merespons.
+   - Nomor telepon menjadi identitas unik pelanggan: nomor yang sama tidak membuat data baru, dan nama terbaru otomatis memperbarui profil lama.

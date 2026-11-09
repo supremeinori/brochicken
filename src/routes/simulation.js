@@ -69,6 +69,7 @@ async function processCustomerChat(req, res) {
     }
 
     const customerName = (name && name.trim()) ? name.trim() : 'Pelanggan Bro Chicken';
+    const providedName = (name && name.trim()) ? name.trim() : null;
     const rawPhone = (phone && phone.trim()) ? phone.trim() : '081299990001';
     const normalizedPhone = normalizePhone(rawPhone);
     const validSource = ['DIRECT', 'GOFOOD', 'GRABFOOD', 'OTHER'].includes(source) ? source : 'GOFOOD';
@@ -95,6 +96,13 @@ async function processCustomerChat(req, res) {
         now
       );
       customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(custResult.lastInsertRowid);
+    } else if (providedName && providedName !== customer.name) {
+      // Nomor telepon adalah identitas unik pelanggan. Jangan buat data baru;
+      // cukup perbarui nama dengan nama terbaru yang dikirim pelanggan.
+      const now = new Date().toISOString();
+      db.prepare('UPDATE customers SET name = ?, updated_at = ? WHERE id = ?')
+        .run(providedName, now, customer.id);
+      customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customer.id);
     }
 
     // 2. Analisis AI Triage (Gemini 3.5 Flash Lite dengan fallback Rule-Based NLP)

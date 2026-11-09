@@ -6,7 +6,7 @@ try {
 } catch (e) {}
 
 const app = require('../src/server');
-const { getDb } = require('../src/db/database');
+const { getDb, normalizePhone } = require('../src/db/database');
 
 // Klien SSE minimal berbasis fetch + ReadableStream (tanpa dependensi tambahan)
 function createSSEClient(url, headers = {}) {
@@ -240,6 +240,69 @@ async function runTest() {
       throw new Error('Log aktivitas balasan admin tidak tercatat di SQLite.');
     }
     console.log('[PASS] Tiket otomatis berpindah ke IN_PROGRESS dengan first_response_at tercatat & audit log tersimpan!');
+
+    // 10. Verifikasi identitas pelanggan: nomor telepon unik, nama terbaru menimpa nama lama
+    console.log('[10] Menguji idempotensi pelanggan berdasarkan nomor telepon...');
+    const updatedCustomerName = 'Rina Nama Terbaru';
+    const repeatChatRes = await fetch(`${baseUrl}/api/simulation/public/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: updatedCustomerName,
+        phone: customerPhone,
+        source: 'DIRECT',
+        message: 'Halo min, saya Rina dengan nama terbaru. Mau tanya menu ayam krispi hari ini.'
+      })
+    });
+    const repeatChatData = await repeatChatRes.json();
+    if (!repeatChatData.success) {
+      throw new Error('Chat ulang dari nomor yang sama gagal diproses.');
+    }
+    if (repeatChatData.customer.id !== publicChatData.customer.id) {
+      throw new Error('Nomor telepon yang sama membuat data pelanggan baru.');
+    }
+
+    const customerRows = db.prepare('SELECT * FROM customers WHERE phone = ?').all(normalizePhone(customerPhone));
+    if (customerRows.length !== 1) {
+      throw new Error(`Harusnya hanya 1 pelanggan untuk nomor ini, ditemukan ${customerRows.length}.`);
+    }
+    if (customerRows[0].name !== updatedCustomerName) {
+      throw new Error(`Nama pelanggan tidak diperbarui. Ditemukan: ${customerRows[0].name}`);
+    }
+    console.log('[PASS] Nomor telepon tetap unik; nama pelanggan diperbarui ke nama terbaru tanpa duplikasi data.');
+
+    // 11. Verifikasi format nomor berbeda tetap satu pelanggan dan nama kosong tidak menghapus nama lama
+    console.log('[11] Menguji normalisasi format nomor dan proteksi nama kosong...');
+    const formattedPhone = '+62 812-9911-2233';
+    const emptyNameChatRes = await fetch(`${baseUrl}/api/simulation/public/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '',
+        phone: formattedPhone,
+        source: 'GOFOOD',
+        message: 'Halo min, mau tanya promo paket hemat minggu ini.'
+      })
+    });
+    const emptyNameChatData = await emptyNameChatRes.json();
+    if (!emptyNameChatData.success) {
+      throw new Error('Chat dengan format nomor berbeda gagal diproses.');
+    }
+    if (emptyNameChatData.customer.id !== publicChatData.customer.id) {
+      throw new Error('Format nomor berbeda membuat data pelanggan baru.');
+    }
+
+    const finalCustomerRows = db.prepare('SELECT * FROM customers WHERE phone = ?').all(normalizePhone(customerPhone));
+    if (finalCustomerRows.length !== 1) {
+      throw new Error(`Harusnya tetap 1 pelanggan, ditemukan ${finalCustomerRows.length}.`);
+    }
+    if (finalCustomerRows[0].name !== updatedCustomerName) {
+      throw new Error('Nama lama terhapus oleh input nama kosong.');
+    }
+    if (finalCustomerRows[0].source !== 'GRABFOOD') {
+      throw new Error(`Source awal harus tetap GRABFOOD, ditemukan: ${finalCustomerRows[0].source}`);
+    }
+    console.log('[PASS] Format nomor berbeda tetap satu pelanggan; nama kosong tidak menimpa nama dan source awal dipertahankan.');
 
     console.log('\n=== SELURUH PENGUJIAN 2-POV REAL-TIME BERHASIL 100% ===');
   } finally {
