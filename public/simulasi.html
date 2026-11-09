@@ -181,6 +181,73 @@
       chatStream.scrollTop = chatStream.scrollHeight;
     }
 
+    function resetChatStream() {
+      const chatStream = document.getElementById('chat-stream');
+      chatStream.innerHTML = `
+        <div class="wa-bubble system">
+          <div class="wa-sender">Bro Chicken Customer Care</div>
+          <div>Halo, selamat datang di layanan pelanggan Bro Chicken Margonda. Sampaikan keluhan pesanan atau pertanyaan Anda di sini, tim kami siap membantu.</div>
+          <div class="wa-time"><span>${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span></div>
+        </div>
+      `;
+    }
+
+    function addHistoryMessage(message) {
+      const chatStream = document.getElementById('chat-stream');
+      const created = message.created_at ? new Date(message.created_at) : new Date();
+      const timeStr = Number.isNaN(created.getTime())
+        ? ''
+        : created.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      const bubble = document.createElement('div');
+
+      if (message.sender_type === 'CUSTOMER' || message.direction === 'IN') {
+        bubble.className = 'wa-bubble customer';
+        bubble.innerHTML = `
+          <div class="wa-sender">${escapeHtml(message.sender_name || document.getElementById('cust-name').value || 'Anda')}</div>
+          <div class="wa-text">${escapeHtml(message.body || '')}</div>
+          <div class="wa-time"><span>${escapeHtml(timeStr)}</span> &middot; terkirim</div>
+        `;
+      } else if (message.sender_type === 'ADMIN') {
+        bubble.className = 'wa-bubble admin';
+        bubble.innerHTML = `
+          <div class="wa-sender">${escapeHtml(message.sender_name || 'Admin')} &middot; staf Bro Chicken</div>
+          <div class="wa-text">${escapeHtml(message.body || '')}</div>
+          <div class="wa-time"><span>${escapeHtml(timeStr)}</span></div>
+        `;
+      } else {
+        bubble.className = 'wa-bubble system';
+        bubble.innerHTML = `
+          <div class="wa-sender">Bro Chicken Assistant</div>
+          <div class="wa-text">${escapeHtml(message.body || '')}</div>
+          <div class="wa-time"><span>${escapeHtml(timeStr)}</span></div>
+        `;
+      }
+
+      chatStream.appendChild(bubble);
+    }
+
+    async function loadHistory(phone) {
+      try {
+        const res = await fetch(`/api/simulation/public/history?phone=${encodeURIComponent(phone || '')}`);
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.messages) || data.messages.length === 0) return;
+        const chatStream = document.getElementById('chat-stream');
+        chatStream.innerHTML = '';
+        data.messages.forEach(addHistoryMessage);
+        scrollToBottom();
+      } catch (err) {
+        console.error('Gagal memuat riwayat chat.', err);
+      }
+    }
+
+    async function prepareCustomer(phone) {
+      const targetPhone = (phone || '').trim() || '081299887711';
+      currentPhone = targetPhone;
+      resetChatStream();
+      await loadHistory(targetPhone);
+      initSSE();
+    }
+
     function addMemberMessage(messageType, text, couponCode) {
       const chatStream = document.getElementById('chat-stream');
       const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -216,7 +283,7 @@
       const source = document.getElementById('cust-source').value;
 
       if (phone !== currentPhone) {
-        initSSE();
+        await prepareCustomer(phone);
       }
 
       addCustomerMessage(text);
@@ -268,7 +335,7 @@
       } catch (err) {}
     }
 
-    function applyPreset(idx) {
+    async function applyPreset(idx) {
       if (!window.sampleData || !window.sampleData[idx]) return;
       const sample = window.sampleData[idx];
       document.getElementById('cust-name').value = sample.name;
@@ -276,11 +343,11 @@
       document.getElementById('cust-source').value = sample.source;
       document.getElementById('chat-input').value = sample.message;
       document.getElementById('chat-input').focus();
-      initSSE();
+      await prepareCustomer(sample.phone);
     }
 
     document.getElementById('cust-phone').addEventListener('change', () => {
-      initSSE();
+      prepareCustomer(document.getElementById('cust-phone').value);
     });
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -295,7 +362,7 @@
         document.getElementById('cust-name').value = nameParam;
       }
       loadPresets();
-      initSSE();
+      prepareCustomer(currentPhone);
     });
   </script>
 </body>

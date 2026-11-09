@@ -23,7 +23,7 @@ Dokumen ini merupakan panduan teknis pelaksanaan pengembangan aplikasi CRM Bro C
    * Mengaktifkan `PRAGMA foreign_keys = ON;` dan `PRAGMA journal_mode = WAL;`.
    * Membuat 4 tabel utama: `users`, `customers`, `complaints`, `complaint_activities`.
    * Membuat 5 index pencarian wajib (`idx_customers_name`, `idx_customers_status`, dll).
-   * Generator ID berurutan per tahun: `getNextCustomerCode()` (`CUS-YYYY-NNNN`) dan `getNextTicketCode()` (`TCK-YYYY-NNNN`).
+   * Generator ID berformat `KODE+DDMMYY+NNN`: `getNextCustomerCode()` (`CS+DDMMYY+NNN`), `getNextTicketCode()` (`TK+DDMMYY+NNN`), `getNextMemberCode()` (`MB+DDMMYY+NNN`).
    * Fungsi normalisasi nomor WhatsApp: awalan `62` tanpa simbol/spasi.
 
 ### TAHAP 2: Seeding Data Awal Simulasi & Uji CRUD P11 (SELESAI)

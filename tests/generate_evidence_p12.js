@@ -68,12 +68,12 @@ const server = app.listen(PORT, async () => {
     await page.screenshot({ path: path03, fullPage: false });
     console.log(` -> Tersimpan: ${path03}`);
 
-    // 5. Screenshot 4: Detail Keluhan & Tindak Lanjut (TCK-2026-0045)
-    console.log('[Langkah 5] Membuka detail tiket keluhan TCK-2026-0045...');
+    // 5. Screenshot 4: Detail Keluhan & Tindak Lanjut (TK001)
+    console.log('[Langkah 5] Membuka detail tiket keluhan TK001...');
     await page.evaluate(() => {
       const rows = document.querySelectorAll('#complaint-tbody tr');
       for (const row of rows) {
-        if (row.innerText.includes('TCK-2026-0045')) {
+        if (row.innerText.includes('TK001')) {
           const btn = row.querySelector('button.btn-secondary');
           if (btn) btn.click();
           break;
@@ -104,7 +104,7 @@ const server = app.listen(PORT, async () => {
       }
       const ticketInput = document.getElementById('wa-ticket-input');
       if (ticketInput) {
-        ticketInput.value = 'TCK-2026-0045';
+        ticketInput.value = 'TK001';
         ticketInput.dispatchEvent(new Event('input'));
       }
     });

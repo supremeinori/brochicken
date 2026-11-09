@@ -120,6 +120,20 @@ function initSchema(db) {
       sent_at TEXT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS simulation_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      phone TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('IN', 'OUT')),
+      sender_type TEXT NOT NULL CHECK (sender_type IN ('CUSTOMER', 'ADMIN', 'AI')),
+      sender_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      ticket_id INTEGER NULL REFERENCES complaints(id),
+      analysis_json TEXT NULL,
+      read_at TEXT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
     CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
     CREATE INDEX IF NOT EXISTS idx_complaints_status_created ON complaints(status, created_at);
@@ -129,61 +143,65 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_member_transactions_customer_occurred ON member_transactions(customer_id, occurred_at);
     CREATE INDEX IF NOT EXISTS idx_member_messages_customer_created ON member_messages(customer_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_member_coupons_customer_status ON member_coupons(customer_id, status);
+    CREATE INDEX IF NOT EXISTS idx_simulation_messages_customer_created ON simulation_messages(customer_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_simulation_messages_unread ON simulation_messages(customer_id, direction, read_at);
   `);
 }
 
-function getNextCustomerCode(db) {
-  const year = new Date().getFullYear();
-  const prefix = `CUS-${year}-`;
+function formatDateDDMMYY(dateObj = new Date()) {
+  const d = new Date(dateObj);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day}${month}${year}`;
+}
+
+function getNextCustomerCode(db, refDate = new Date()) {
+  const dateStr = formatDateDDMMYY(refDate);
+  const prefix = `CS${dateStr}`;
   const row = db.prepare(
-    `SELECT customer_code FROM customers WHERE customer_code LIKE ? ORDER BY customer_code DESC LIMIT 1`
+    `SELECT customer_code FROM customers WHERE customer_code LIKE ? ORDER BY id DESC LIMIT 1`
   ).get(`${prefix}%`);
 
   let nextSeq = 1;
   if (row && row.customer_code) {
-    const parts = row.customer_code.split('-');
-    if (parts.length === 3) {
-      const num = parseInt(parts[2], 10);
-      if (!isNaN(num)) nextSeq = num + 1;
-    }
+    const seqStr = row.customer_code.slice(8);
+    const num = parseInt(seqStr, 10);
+    if (!isNaN(num)) nextSeq = num + 1;
   }
-  return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+  return `${prefix}${String(nextSeq).padStart(3, '0')}`;
 }
 
-function getNextTicketCode(db) {
-  const year = new Date().getFullYear();
-  const prefix = `TCK-${year}-`;
+function getNextTicketCode(db, refDate = new Date()) {
+  const dateStr = formatDateDDMMYY(refDate);
+  const prefix = `TK${dateStr}`;
   const row = db.prepare(
-    `SELECT ticket_code FROM complaints WHERE ticket_code LIKE ? ORDER BY ticket_code DESC LIMIT 1`
+    `SELECT ticket_code FROM complaints WHERE ticket_code LIKE ? ORDER BY id DESC LIMIT 1`
   ).get(`${prefix}%`);
 
   let nextSeq = 1;
   if (row && row.ticket_code) {
-    const parts = row.ticket_code.split('-');
-    if (parts.length === 3) {
-      const num = parseInt(parts[2], 10);
-      if (!isNaN(num)) nextSeq = num + 1;
-    }
+    const seqStr = row.ticket_code.slice(8);
+    const num = parseInt(seqStr, 10);
+    if (!isNaN(num)) nextSeq = num + 1;
   }
-  return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+  return `${prefix}${String(nextSeq).padStart(3, '0')}`;
 }
 
-function getNextMemberCode(db) {
-  const year = new Date().getFullYear();
-  const prefix = `MBR-${year}-`;
+function getNextMemberCode(db, refDate = new Date()) {
+  const dateStr = formatDateDDMMYY(refDate);
+  const prefix = `MB${dateStr}`;
   const row = db.prepare(
-    `SELECT member_code FROM memberships WHERE member_code LIKE ? ORDER BY member_code DESC LIMIT 1`
+    `SELECT member_code FROM memberships WHERE member_code LIKE ? ORDER BY id DESC LIMIT 1`
   ).get(`${prefix}%`);
 
   let nextSeq = 1;
   if (row && row.member_code) {
-    const parts = row.member_code.split('-');
-    if (parts.length === 3) {
-      const num = parseInt(parts[2], 10);
-      if (!isNaN(num)) nextSeq = num + 1;
-    }
+    const seqStr = row.member_code.slice(8);
+    const num = parseInt(seqStr, 10);
+    if (!isNaN(num)) nextSeq = num + 1;
   }
-  return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+  return `${prefix}${String(nextSeq).padStart(3, '0')}`;
 }
 
 function normalizePhone(input) {

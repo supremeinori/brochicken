@@ -18,7 +18,7 @@ router.get('/info', (req, res) => {
       address: 'Jl. Margonda Raya No. 128, Depok, Jawa Barat',
       sla_minutes: 60,
       sla_policy: 'Target waktu respons keluhan pelanggan ditetapkan tetap 60 menit kalender.',
-      numbering_policy: 'CUS-YYYY-NNNN untuk pelanggan, TCK-YYYY-NNNN untuk tiket.',
+      numbering_policy: 'CS+DDMMYY+NNN untuk pelanggan, TK+DDMMYY+NNN untuk tiket, MB+DDMMYY+NNN untuk member.',
       database_type: 'SQLite Lokal (brochicken_crm.sqlite)'
     }
   });

@@ -70,12 +70,12 @@ Sistem telah diinisialisasi otomatis dengan data awal (*auto-seed*):
 
 1. **Dashboard Operasional:** Metrik pelanggan aktif, tiket berjalan, tiket lewat batas SLA (>60 menit), dan tabel 5 tiket keluhan terbaru dengan indikator countdown waktu respons.
 2. **Pengelolaan Pelanggan:**
-   - Penomoran otomatis format `CUS-YYYY-NNNN`.
+   - Penomoran otomatis format `CS+DDMMYY+NNN` (contoh: `CS091126001`).
    - Pencarian instan (nama, no WA, ID), filter kanal pesanan (`DIRECT`, `GOFOOD`, `GRABFOOD`, `OTHER`), dan filter status aktif/arsip.
    - Normalisasi nomor WhatsApp otomatis dengan awalan `62`.
    - Pengarsipan aman tanpa menghapus data historis tiket keluhan.
 3. **Manajemen Keluhan & SLA 60 Menit:**
-   - Penomoran otomatis tiket `TCK-YYYY-NNNN`.
+   - Penomoran otomatis tiket `TK+DDMMYY+NNN` (contoh: `TK091126001`).
    - Alur status berjenjang: `Baru ➔ Diproses ➔ Selesai`.
    - Penandaan batas SLA 60 menit kalender secara akurat (*Sisa waktu*, *Kritis*, *Lewat batas waktu*).
    - Pengalihan penanggung jawab (PIC) ke admin aktif lain dan penambahan catatan tindak lanjut internal.

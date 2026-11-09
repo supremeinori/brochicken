@@ -1,5 +1,6 @@
 const assert = require('node:assert');
 const app = require('../src/server');
+const { getDb } = require('../src/db/database');
 
 console.log('=== PENGUJIAN INTEGRASI SERVER & ENDPOINT API ===\n');
 

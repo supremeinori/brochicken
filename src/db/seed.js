@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { getDb } = require('./database');
+const { getDb, getNextCustomerCode, getNextTicketCode, getNextMemberCode, normalizePhone } = require('./database');
 
 function seedDatabase(db) {
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
@@ -14,7 +14,7 @@ function seedDatabase(db) {
   const defaultPasswordHash = bcrypt.hashSync('12345678', salt);
   const now = new Date().toISOString();
 
-  // 1. Akun Pengguna (Owner & Admin dengan username: owner & admin, sandi: 12345678)
+  // 1. Akun Pengguna (Owner & Admin)
   const insertUser = db.prepare(`
     INSERT INTO users (name, username, password_hash, role, is_active, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -30,29 +30,29 @@ function seedDatabase(db) {
   const rinaUser = db.prepare("SELECT id FROM users WHERE username = 'rina_sari'").get();
   const doniUser = db.prepare("SELECT id FROM users WHERE username = 'doni_pratama'").get();
 
-  // 2. Data Pelanggan Simulasi (21 Pelanggan)
+  // 2. Data Pelanggan Simulasi (21 Pelanggan) - gunakan generator code baru
   const customersData = [
-    { code: 'CUS-2026-0001', name: 'Hendra Kusuma', phone: '6281234567890', source: 'GOFOOD', notes: 'Langganan menu Paket Geprek Komplit, suka ekstra sambal bawang pedas level 5.' },
-    { code: 'CUS-2026-0002', name: 'Siti Aminah', phone: '6281234567891', source: 'GRABFOOD', notes: 'Sering pesan untuk kantor hari Jumat jam makan siang.' },
-    { code: 'CUS-2026-0003', name: 'Dewi Sartika', phone: '6281234567892', source: 'DIRECT', notes: 'Pelanggan tetap outlet Margonda, sering datang bawa keluarga.' },
-    { code: 'CUS-2026-0004', name: 'Arif Wijaya', phone: '6281234567893', source: 'DIRECT', notes: 'Pesan ayam potong paha atas crispy tanpa kulit jika ada.' },
-    { code: 'CUS-2026-0005', name: 'Maya Indah', phone: '6281234567894', source: 'OTHER', notes: 'Pemesanan via telepon hotline outlet.' },
-    { code: 'CUS-2026-0006', name: 'Rizky Fauzi', phone: '6281234567895', source: 'GOFOOD', notes: 'Request sambal matah dipisah selalu.' },
-    { code: 'CUS-2026-0007', name: 'Bambang Irawan', phone: '6281234567896', source: 'GRABFOOD', notes: 'Pelanggan setia menu Kulit Crispy Bro.' },
-    { code: 'CUS-2026-0008', name: 'Ratna Sulistyo', phone: '6281234567897', source: 'DIRECT', notes: 'Suka nasi uduk Bro Chicken dengan kremesan melimpah.' },
-    { code: 'CUS-2026-0009', name: 'Fajar Nugraha', phone: '6281234567898', source: 'GOFOOD', notes: 'Order rutin setiap Senin dan Rabu sore.' },
-    { code: 'CUS-2026-0010', name: 'Eka Prasetya', phone: '6281234567899', source: 'GRABFOOD', notes: 'Pesanan box catering ulang tahun mini.' },
-    { code: 'CUS-2026-0011', name: 'Dian Permatasari', phone: '6281311223344', source: 'DIRECT', notes: 'Dapat diskon kartu komunitas alumni kampus.' },
-    { code: 'CUS-2026-0012', name: 'Gunawan Susanto', phone: '6281311223355', source: 'GOFOOD', notes: 'Pelanggan delivery kos-kosan dekat outlet.' },
-    { code: 'CUS-2026-0013', name: 'Tri Wahyuni', phone: '6281311223366', source: 'DIRECT', notes: 'Selalu bayar non-tunai QRIS di kasir.' },
-    { code: 'CUS-2026-0014', name: 'Agus Setiawan', phone: '6281311223377', source: 'OTHER', notes: 'Pesanan rombongan jamaah pengajian.' },
-    { code: 'CUS-2026-0015', name: 'Indah Puspitasari', phone: '6281311223388', source: 'GRABFOOD', notes: 'Catatan alamat sering harus diinfokan ke kurir.' },
-    { code: 'CUS-2026-0016', name: 'Wahyu Hidayat', phone: '6281311223399', source: 'DIRECT', notes: 'Sering bungkus take-away sepulang kantor.' },
-    { code: 'CUS-2026-0017', name: 'Lestari Handayani', phone: '6281512345678', source: 'GOFOOD', notes: 'Pencinta sambal korek pedas gurih.' },
-    { code: 'CUS-2026-0018', name: 'Dimas Anggoro', phone: '6281512345679', source: 'GRABFOOD', notes: 'Pernah minta ganti potongan dada ke paha bawah.' },
-    { code: 'CUS-2026-0019', name: 'Nurul Hasanah', phone: '6281512345680', source: 'DIRECT', notes: 'Langganan menu paket hemat siang hari.' },
-    { code: 'CUS-2026-0020', name: 'Ahmad Ridwan', phone: '6281512345681', source: 'OTHER', notes: 'Kontak katering kantor rekanan.' },
-    { code: 'CUS-2026-0021', name: 'Yuliana Tan', phone: '6281512345682', source: 'DIRECT', notes: 'Baru mendaftar saat promo pembukaan cabang.', status: 'ARCHIVED' }
+    { name: 'Hendra Kusuma', phone: '6281234567890', source: 'GOFOOD', notes: 'Langganan menu Paket Geprek Komplit, suka ekstra sambal bawang pedas level 5.' },
+    { name: 'Siti Aminah', phone: '6281234567891', source: 'GRABFOOD', notes: 'Sering pesan untuk kantor hari Jumat jam makan siang.' },
+    { name: 'Dewi Sartika', phone: '6281234567892', source: 'DIRECT', notes: 'Pelanggan tetap outlet Margonda, sering datang bawa keluarga.' },
+    { name: 'Arif Wijaya', phone: '6281234567893', source: 'DIRECT', notes: 'Pesan ayam potong paha atas crispy tanpa kulit jika ada.' },
+    { name: 'Maya Indah', phone: '6281234567894', source: 'OTHER', notes: 'Pemesanan via telepon hotline outlet.' },
+    { name: 'Rizky Fauzi', phone: '6281234567895', source: 'GOFOOD', notes: 'Request sambal matah dipisah selalu.' },
+    { name: 'Bambang Irawan', phone: '6281234567896', source: 'GRABFOOD', notes: 'Pelanggan setia menu Kulit Crispy Bro.' },
+    { name: 'Ratna Sulistyo', phone: '6281234567897', source: 'DIRECT', notes: 'Suka nasi uduk Bro Chicken dengan kremesan melimpah.' },
+    { name: 'Fajar Nugraha', phone: '6281234567898', source: 'GOFOOD', notes: 'Order rutin setiap Senin dan Rabu sore.' },
+    { name: 'Eka Prasetya', phone: '6281234567899', source: 'GRABFOOD', notes: 'Pesanan box catering ulang tahun mini.' },
+    { name: 'Dian Permatasari', phone: '6281311223344', source: 'DIRECT', notes: 'Dapat diskon kartu komunitas alumni kampus.' },
+    { name: 'Gunawan Susanto', phone: '6281311223355', source: 'GOFOOD', notes: 'Pelanggan delivery kos-kosan dekat outlet.' },
+    { name: 'Tri Wahyuni', phone: '6281311223366', source: 'DIRECT', notes: 'Selalu bayar non-tunai QRIS di kasir.' },
+    { name: 'Agus Setiawan', phone: '6281311223377', source: 'OTHER', notes: 'Pesanan rombongan jamaah pengajian.' },
+    { name: 'Indah Puspitasari', phone: '6281311223388', source: 'GRABFOOD', notes: 'Catatan alamat sering harus diinfokan ke kurir.' },
+    { name: 'Wahyu Hidayat', phone: '6281311223399', source: 'DIRECT', notes: 'Sering bungkus take-away sepulang kantor.' },
+    { name: 'Lestari Handayani', phone: '6281512345678', source: 'GOFOOD', notes: 'Pencinta sambal korek pedas gurih.' },
+    { name: 'Dimas Anggoro', phone: '6281512345679', source: 'GRABFOOD', notes: 'Pernah minta ganti potongan dada ke paha bawah.' },
+    { name: 'Nurul Hasanah', phone: '6281512345680', source: 'DIRECT', notes: 'Langganan menu paket hemat siang hari.' },
+    { name: 'Ahmad Ridwan', phone: '6281512345681', source: 'OTHER', notes: 'Kontak katering kantor rekanan.' },
+    { name: 'Yuliana Tan', phone: '6281512345682', source: 'DIRECT', notes: 'Baru mendaftar saat promo pembukaan cabang.', status: 'ARCHIVED' }
   ];
 
   const insertCustomer = db.prepare(`
@@ -60,10 +60,12 @@ function seedDatabase(db) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
+  const refDate = new Date(); // gunakan tanggal hari ini untuk DDMMYY
   customersData.forEach((c, idx) => {
+    const code = getNextCustomerCode(db, refDate);
     const joined = new Date(Date.now() - (30 - idx) * 86400000).toISOString();
     insertCustomer.run(
-      c.code,
+      code,
       c.name,
       c.phone,
       c.source,
@@ -88,20 +90,21 @@ function seedDatabase(db) {
     VALUES (?, ?, ?, ?, ?)
   `);
 
-  const cust1 = db.prepare("SELECT id FROM customers WHERE customer_code = 'CUS-2026-0001'").get();
-  const cust2 = db.prepare("SELECT id FROM customers WHERE customer_code = 'CUS-2026-0002'").get();
-  const cust3 = db.prepare("SELECT id FROM customers WHERE customer_code = 'CUS-2026-0003'").get();
-  const cust4 = db.prepare("SELECT id FROM customers WHERE customer_code = 'CUS-2026-0004'").get();
-  const cust6 = db.prepare("SELECT id FROM customers WHERE customer_code = 'CUS-2026-0006'").get();
-  const cust7 = db.prepare("SELECT id FROM customers WHERE customer_code = 'CUS-2026-0007'").get();
+  const cust1 = db.prepare("SELECT id FROM customers WHERE phone = '6281234567890'").get();
+  const cust2 = db.prepare("SELECT id FROM customers WHERE phone = '6281234567891'").get();
+  const cust3 = db.prepare("SELECT id FROM customers WHERE phone = '6281234567892'").get();
+  const cust4 = db.prepare("SELECT id FROM customers WHERE phone = '6281234567893'").get();
+  const cust6 = db.prepare("SELECT id FROM customers WHERE phone = '6281234567895'").get();
+  const cust7 = db.prepare("SELECT id FROM customers WHERE phone = '6281234567896'").get();
 
   const currentTime = Date.now();
 
   // Tiket 1: BARU (created 45 menit lalu -> SLA due 15 menit lagi)
   const t1Created = new Date(currentTime - 45 * 60000).toISOString();
   const t1Due = new Date(currentTime + 15 * 60000).toISOString();
+  const t1Code = getNextTicketCode(db, new Date(t1Created));
   const res1 = insertComplaint.run(
-    'TCK-2026-0045',
+    t1Code,
     cust1.id,
     'FOOD_QUALITY',
     'Ayam geprek bagian paha atas terasa dingin di bagian dalam daging dan sambal bawang tidak gurih seperti biasa.',
@@ -120,8 +123,9 @@ function seedDatabase(db) {
   const t2Created = new Date(currentTime - 68 * 60000).toISOString();
   const t2Due = new Date(currentTime - 8 * 60000).toISOString();
   const t2Response = new Date(currentTime - 28 * 60000).toISOString();
+  const t2Code = getNextTicketCode(db, new Date(t2Created));
   const res2 = insertComplaint.run(
-    'TCK-2026-0044',
+    t2Code,
     cust2.id,
     'DELIVERY_DELAY',
     'Pesanan makan siang kantor terlambat lebih dari 45 menit dari estimasi waktu pengantaran via kurir internal.',
@@ -141,8 +145,9 @@ function seedDatabase(db) {
   const t3Created = new Date(currentTime - 25 * 60000).toISOString();
   const t3Due = new Date(currentTime + 35 * 60000).toISOString();
   const t3Response = new Date(currentTime - 15 * 60000).toISOString();
+  const t3Code = getNextTicketCode(db, new Date(t3Created));
   const res3 = insertComplaint.run(
-    'TCK-2026-0043',
+    t3Code,
     cust3.id,
     'WRONG_ORDER',
     'Menerima menu ayam bakar manis, padahal memesan paket ayam geprek pedas level 3.',
@@ -163,8 +168,9 @@ function seedDatabase(db) {
   const t4Due = new Date(currentTime - 24 * 3600000 + 3600000).toISOString();
   const t4Response = new Date(currentTime - 24 * 3600000 + 1200000).toISOString();
   const t4Resolved = new Date(currentTime - 24 * 3600000 + 2400000).toISOString();
+  const t4Code = getNextTicketCode(db, new Date(t4Created));
   const res4 = insertComplaint.run(
-    'TCK-2026-0042',
+    t4Code,
     cust4.id,
     'SERVICE',
     'Pelayanan kasir outlet dinilai kurang ramah dan tidak menawarkan promo paket hemat.',
@@ -186,8 +192,9 @@ function seedDatabase(db) {
   const t5Due = new Date(currentTime - 48 * 3600000 + 3600000).toISOString();
   const t5Response = new Date(currentTime - 48 * 3600000 + 900000).toISOString();
   const t5Resolved = new Date(currentTime - 48 * 3600000 + 1800000).toISOString();
+  const t5Code = getNextTicketCode(db, new Date(t5Created));
   const res5 = insertComplaint.run(
-    'TCK-2026-0041',
+    t5Code,
     cust6.id,
     'FOOD_QUALITY',
     'Kulit krispi agak alot karena kemasan kotak tertutup terlalu rapat saat pengantaran.',
@@ -209,8 +216,9 @@ function seedDatabase(db) {
   const t6Due = new Date(currentTime - 72 * 3600000 + 3600000).toISOString();
   const t6Response = new Date(currentTime - 72 * 3600000 + 4500000).toISOString(); // 75 menit
   const t6Resolved = new Date(currentTime - 72 * 3600000 + 7200000).toISOString();
+  const t6Code = getNextTicketCode(db, new Date(t6Created));
   const res6 = insertComplaint.run(
-    'TCK-2026-0040',
+    t6Code,
     cust7.id,
     'CLEANLINESS',
     'Meja area dine-in belum dibersihkan saat pelanggan datang.',
@@ -251,12 +259,12 @@ function seedMembershipDemoData(db) {
   const iso = (daysAgo) => new Date(now - daysAgo * 86400000).toISOString();
 
   const demoMembers = [
-    { phone: '6281234567890', code: 'MBR-2026-0001', via: 'QR_OUTLET', joined: 60, lastTxn: 30 },
-    { phone: '6281234567891', code: 'MBR-2026-0002', via: 'QR_PACKAGING', joined: 45, lastTxn: 20 },
-    { phone: '6281234567892', code: 'MBR-2026-0003', via: 'QR_TABLE', joined: 30, lastTxn: 4 },
-    { phone: '6281234567893', code: 'MBR-2026-0004', via: 'QR_OUTLET', joined: 20, lastTxn: 16 },
-    { phone: '6281234567894', code: 'MBR-2026-0005', via: 'QR_TABLE', joined: 8, lastTxn: null },
-    { phone: '6281234567895', code: 'MBR-2026-0006', via: 'MANUAL', joined: 40, lastTxn: null }
+    { phone: '6281234567890', via: 'QR_OUTLET', joined: 60, lastTxn: 30 },
+    { phone: '6281234567891', via: 'QR_PACKAGING', joined: 45, lastTxn: 20 },
+    { phone: '6281234567892', via: 'QR_TABLE', joined: 30, lastTxn: 4 },
+    { phone: '6281234567893', via: 'QR_OUTLET', joined: 20, lastTxn: 16 },
+    { phone: '6281234567894', via: 'QR_TABLE', joined: 8, lastTxn: null },
+    { phone: '6281234567895', via: 'MANUAL', joined: 40, lastTxn: null }
   ];
 
   const insertMember = db.prepare(`
@@ -287,9 +295,11 @@ function seedMembershipDemoData(db) {
 
     const joinedAt = iso(item.joined);
     const welcomeAt = iso(item.joined - 0.001);
+    const memberCode = getNextMemberCode(db, new Date(joinedAt));
+
     insertMember.run(
       customer.id,
-      item.code,
+      memberCode,
       item.via,
       item.via === 'MANUAL' ? null : item.via,
       joinedAt,
@@ -304,59 +314,27 @@ function seedMembershipDemoData(db) {
       customer.id,
       customer.phone,
       'WELCOME',
-      `Halo Kak ${customer.name}, selamat datang di Bro Chicken Membership!\n\nKatalog Paket Hemat:\n1. Paket Hemat Krispi - Nasi + Ayam Krispi + Es Teh (Rp25.000)\n2. Paket Hemat Geprek - Nasi + Ayam Geprek + Es Teh (Rp27.000)\n3. Paket Hemat Berdua - 2 Nasi + 2 Ayam + 2 Es Teh (Rp50.000)\n\nKode member: ${item.code}`,
+      `Halo Kak ${customer.name}, selamat datang di Bro Chicken Membership!\n\nKatalog Paket Hemat:\n1. Paket Hemat Krispi - Nasi + Ayam Krispi + Es Teh (Rp25.000)\n2. Paket Hemat Geprek - Nasi + Ayam Geprek + Es Teh (Rp27.000)\n3. Paket Hemat Berdua - 2 Nasi + 2 Ayam + 2 Es Teh (Rp50.000)\n\nKode member: ${memberCode}`,
       item.via === 'MANUAL' ? null : item.via,
       joinedAt,
-      welcomeAt
+      joinedAt
     );
 
     if (item.lastTxn !== null) {
-      insertTxn.run(
-        customer.id,
-        iso(item.lastTxn),
-        customer.source,
-        'Transaksi demo membership di outlet Margonda.',
-        admin ? admin.id : null,
-        iso(item.lastTxn)
-      );
-      // Riwayat tambahan agar detail member terlihat hidup.
-      insertTxn.run(
-        customer.id,
-        iso(item.lastTxn + 7),
-        customer.source,
-        'Transaksi demo sebelumnya.',
-        admin ? admin.id : null,
-        iso(item.lastTxn + 7)
-      );
+      // Map via to valid channel for member_transactions
+      const channelMap = {
+        'QR_OUTLET': 'DIRECT',
+        'QR_PACKAGING': 'OTHER',
+        'QR_TABLE': 'DIRECT',
+        'MANUAL': 'DIRECT'
+      };
+      const validChannel = channelMap[item.via] || 'DIRECT';
+      insertTxn.run(customer.id, iso(item.lastTxn), validChannel, 'Transaksi demo', admin.id, iso(item.lastTxn));
     }
     created++;
   }
 
-  // Satu kupon demo yang sudah terpakai pada bulan sebelumnya.
-  const hendra = db.prepare("SELECT id FROM customers WHERE phone = '6281234567890'").get();
-  if (hendra) {
-    db.prepare(`
-      INSERT OR IGNORE INTO member_coupons (
-        coupon_code, customer_id, campaign_id, discount_percent, status,
-        issued_at, expires_at, used_at, used_by, created_at
-      ) VALUES (?, ?, 'END_MONTH_2026-10', 10, 'USED', ?, ?, ?, ?, ?)
-    `).run(
-      'BC-TU-202610-0001',
-      hendra.id,
-      iso(35),
-      iso(28),
-      iso(27),
-      admin ? admin.id : null,
-      iso(35)
-    );
-  }
-
-  console.log(`[Seed] Data membership demo: ${created} member, riwayat transaksi, dan 1 kupon terpakai.`);
-}
-
-if (require.main === module) {
-  const db = getDb();
-  seedDatabase(db);
+  console.log(`[Seed] Membership demo: ${created} member dibuat.`);
 }
 
 module.exports = { seedDatabase, seedMembershipDemoData };

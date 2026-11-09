@@ -43,9 +43,10 @@ test(2, 'Role akun terdefinisi ketat antara OWNER dan ADMIN', () => {
 
 // 3. Data Pelanggan CRUD
 test(3, 'Data pelanggan dapat ditambah, dicari, diubah, dan diarsipkan', () => {
-  const cust = db.prepare("SELECT * FROM customers WHERE customer_code = 'CUS-2026-0001'").get();
+  const cust = db.prepare("SELECT * FROM customers ORDER BY id LIMIT 1").get();
   assert.ok(cust, 'Pelanggan pertama harus ditemukan');
   assert.strictEqual(cust.status, 'ACTIVE');
+  assert.match(cust.customer_code, /^CS\d{9}$/);
 
   const archived = db.prepare("SELECT * FROM customers WHERE status = 'ARCHIVED'").get();
   assert.ok(archived, 'Harus ada data pelanggan terarsip');
@@ -70,16 +71,16 @@ test(5, 'Nomor telepon pelanggan diawali 62 dan unik', () => {
 
 // 6. Riwayat Pelanggan
 test(6, 'Detail pelanggan menampilkan seluruh tiket keluhan yang terhubung', () => {
-  const cust1 = db.prepare("SELECT id FROM customers WHERE customer_code = 'CUS-2026-0001'").get();
+  const cust1 = db.prepare("SELECT id FROM customers ORDER BY id LIMIT 1").get();
   const complaints = db.prepare('SELECT * FROM complaints WHERE customer_id = ?').all(cust1.id);
   assert.ok(complaints.length > 0, 'Harus ada tiket terhubung untuk pelanggan 1');
 });
 
 // 7. Pembuatan Tiket
-test(7, 'Tiket memiliki format unik TCK-YYYY-NNNN, kategori, prioritas, dan PIC', () => {
-  const ticket = db.prepare("SELECT * FROM complaints WHERE ticket_code = 'TCK-2026-0045'").get();
+test(7, 'Tiket memiliki format unik TKDDMMYYNNN, kategori, prioritas, dan PIC', () => {
+  const ticket = db.prepare("SELECT * FROM complaints ORDER BY id LIMIT 1").get();
   assert.ok(ticket, 'Tiket harus ada');
-  assert.match(ticket.ticket_code, /^TCK-\d{4}-\d{4}$/);
+  assert.match(ticket.ticket_code, /^TK\d{9}$/);
   assert.ok(['FOOD_QUALITY', 'WRONG_ORDER', 'DELIVERY_DELAY', 'SERVICE', 'CLEANLINESS', 'OTHER'].includes(ticket.category));
   assert.ok(['LOW', 'MEDIUM', 'HIGH'].includes(ticket.priority));
   assert.ok(ticket.assigned_to, 'PIC wajib ada');
@@ -94,7 +95,7 @@ test(8, 'Sistem mencatat pembuatan tiket, perubahan status, PIC, dan catatan', (
 
 // 9. Batas SLA Tepat 60 Menit
 test(9, 'Batas SLA tepat 60 menit (3.600.000 ms) setelah waktu pembuatan', () => {
-  const ticket = db.prepare("SELECT created_at, sla_due_at FROM complaints WHERE ticket_code = 'TCK-2026-0045'").get();
+  const ticket = db.prepare("SELECT created_at, sla_due_at FROM complaints ORDER BY id LIMIT 1").get();
   const createdMs = new Date(ticket.created_at).getTime();
   const dueMs = new Date(ticket.sla_due_at).getTime();
   const diffMinutes = (dueMs - createdMs) / 60000;

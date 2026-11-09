@@ -111,7 +111,7 @@ function renderShell() {
           <div class="nav-group">
             <div class="nav-group-label">Komunikasi</div>
             <a class="nav-link" data-route="whatsapp" href="#whatsapp" onclick="navigate('whatsapp')">Template WhatsApp</a>
-            <a class="nav-link" data-route="simulation" href="#simulation" onclick="navigate('simulation')">Simulasi WhatsApp</a>
+            <a class="nav-link" data-route="simulation" href="#simulation" onclick="navigate('simulation')">Kotak masuk WhatsApp</a>
           </div>
 
           <div class="nav-group">
@@ -217,7 +217,7 @@ function renderRoute(route, id) {
   else if (route === 'complaints') renderComplaints();
   else if (route === 'complaint-detail' && id != null) renderComplaintDetail(id);
   else if (route === 'whatsapp') renderWhatsApp();
-  else if (route === 'simulation') renderSimulation();
+  else if (route === 'simulation') renderSimulation(id);
   else if (route === 'membership') renderMembership();
   else if (route === 'reports') renderReports();
   else if (route === 'admin') renderAdmin();
@@ -1389,7 +1389,7 @@ function renderWhatsApp() {
             </div>
             <div class="field">
               <label class="label" for="wa-ticket-input">Nomor tiket terkait (opsional)</label>
-              <input type="text" id="wa-ticket-input" class="input" placeholder="Contoh: TCK-2026-0045" oninput="handleWaBindingChange()">
+              <input type="text" id="wa-ticket-input" class="input" placeholder="Contoh: TK091126001" oninput="handleWaBindingChange()">
             </div>
           </div>
         `
@@ -1894,21 +1894,18 @@ async function handleChangeOwnerPassword(event) {
 }
 
 // -------------------------------------------------------------
-// WHATSAPP SIMULATION (ADMIN POV)
+// WHATSAPP INBOX (ADMIN POV)
 // -------------------------------------------------------------
-let simMessages = [
-  {
-    sender: 'ai',
-    text: 'Halo, selamat datang di layanan pelanggan Bro Chicken. Sampaikan keluhan atau pertanyaan pesanan di sini. Asisten akan menganalisis pesan dan membuat tiket bila diperlukan.',
-    time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  }
-];
-let simSamples = [];
-let lastSimAnalysis = null;
-let lastSimTicket = null;
-let lastSimCustomer = null;
-let isSimLoading = false;
+let simRooms = [];
+let simRoomQuery = '';
+let simActiveCustomerId = null;
+let simThread = { customer: null, messages: [], analysis: null, latest_ticket: null };
+let simContextCollapsed = false;
+let simThreadLoading = false;
+let simRoomsLoading = false;
+let simRenderToken = 0;
 let adminSSE = null;
+let simSlaTicker = null;
 
 function initAdminSSE() {
   if (adminSSE) return;
@@ -1918,48 +1915,12 @@ function initAdminSSE() {
   adminSSE.addEventListener('new_customer_chat', (event) => {
     try {
       const data = JSON.parse(event.data);
-      lastSimAnalysis = data.analysis;
-      lastSimCustomer = data.customer;
-      lastSimTicket = data.ticket;
+      const customerName = data.customer ? data.customer.name : 'Pelanggan';
+      showToast(`Pesan baru dari ${customerName}.`);
 
-      simMessages.push({
-        sender: 'cust',
-        name: data.customer ? data.customer.name : 'Pelanggan',
-        text: data.message,
-        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-      });
-
-      if (data.reply) {
-        simMessages.push({
-          sender: 'ai',
-          text: data.reply,
-          time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-        });
+      if (currentRoute === 'simulation') {
+        refreshSimulationInbox({ reloadThread: true });
       }
-
-      showToast(`Chat baru dari ${data.customer ? data.customer.name : 'pelanggan'}.`);
-
-      const chatBody = document.getElementById('sim-chat-body');
-      if (chatBody) {
-        chatBody.innerHTML = renderSimChatBubbles();
-        scrollSimChatToBottom();
-      }
-
-      const inspectorEl = document.getElementById('sim-inspector-content');
-      if (inspectorEl) inspectorEl.innerHTML = renderSimInspectorContent();
-
-      const ticketContentEl = document.getElementById('sim-ticket-content');
-      if (ticketContentEl) ticketContentEl.innerHTML = renderSimTicketContent();
-      startSimSlaTicker();
-
-      const replyTargetEl = document.getElementById('admin-reply-target-name');
-      if (replyTargetEl) replyTargetEl.innerText = data.customer ? data.customer.name : 'Pelanggan';
-
-      const engineBadgeEl = document.getElementById('sim-engine-badge');
-      if (engineBadgeEl && data.analysis) engineBadgeEl.innerText = data.analysis.engine || 'Analisis selesai';
-
-      const ticketBadgeEl = document.getElementById('sim-ticket-badge');
-      if (ticketBadgeEl && data.ticket) ticketBadgeEl.innerText = `Terdaftar #${data.ticket.ticket_code}`;
     } catch (err) {
       console.error('Gagal membaca event new_customer_chat.', err);
     }
@@ -1967,30 +1928,9 @@ function initAdminSSE() {
 
   adminSSE.addEventListener('admin_reply_sent', (event) => {
     try {
-      const data = JSON.parse(event.data);
-      const exists = simMessages.some((m) => m.sender === 'admin' && m.text === data.message);
-      if (!exists) {
-        simMessages.push({
-          sender: 'admin',
-          name: data.admin_name,
-          text: data.message,
-          time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-        });
-        const chatBody = document.getElementById('sim-chat-body');
-        if (chatBody) {
-          chatBody.innerHTML = renderSimChatBubbles();
-          scrollSimChatToBottom();
-        }
-      }
-
-      if (lastSimTicket && data.ticket_id && Number(data.ticket_id) === Number(lastSimTicket.id)) {
-        lastSimTicket.status = 'IN_PROGRESS';
-        if (!lastSimTicket.first_response_at) lastSimTicket.first_response_at = data.timestamp || new Date().toISOString();
-        const ticketContentEl = document.getElementById('sim-ticket-content');
-        if (ticketContentEl) {
-          ticketContentEl.innerHTML = renderSimTicketContent();
-          startSimSlaTicker();
-        }
+      JSON.parse(event.data);
+      if (currentRoute === 'simulation') {
+        refreshSimulationInbox({ reloadThread: true, quiet: true });
       }
     } catch (err) {}
   });
@@ -2036,81 +1976,517 @@ function initAdminSSE() {
   });
 }
 
-function renderSimChatBubbles() {
-  let html = simMessages.map((msg) => {
-    if (msg.sender === 'cust') {
-      return `
-        <div class="wa-bubble customer">
-          <div class="wa-sender">${escapeHtml(msg.name || 'Pelanggan')}</div>
-          <div>${escapeHtml(msg.text)}</div>
-          <div class="wa-time">${escapeHtml(msg.time)} &middot; terkirim</div>
-        </div>
-      `;
-    }
-    if (msg.sender === 'admin') {
-      return `
-        <div class="wa-bubble admin">
-          <div class="wa-sender">${escapeHtml(msg.name || 'Admin')} &middot; staf Bro Chicken</div>
-          <div>${escapeHtml(msg.text)}</div>
-          <div class="wa-time">${escapeHtml(msg.time)}</div>
-        </div>
-      `;
-    }
-    return `
-      <div class="wa-bubble system">
-        <div class="wa-sender">Bro Chicken Assistant</div>
-        <div>${escapeHtml(msg.text)}</div>
-        <div class="wa-time">${escapeHtml(msg.time)}</div>
-      </div>
-    `;
-  }).join('');
-
-  if (isSimLoading) {
-    html += '<div class="wa-typing">Asisten sedang menganalisis pesan dan mendaftarkan tiket...</div>';
-  }
-
-  return html;
+function currentSimRoom() {
+  return simRooms.find((room) => Number(room.customer_id) === Number(simActiveCustomerId)) || null;
 }
 
-function renderSimInspectorContent() {
-  if (!lastSimAnalysis) {
-    return UI.state({
-      title: 'Belum ada pesan dianalisis',
-      hint: 'Buka layar pelanggan, lalu kirim pesan untuk melihat hasil triage.',
-      action: `<a class="btn btn-secondary btn-sm" href="/simulasi" target="_blank" rel="noopener">Buka layar pelanggan</a>`
-    });
+function formatSimClock(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatSimRoomTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) return formatSimClock(iso);
+  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+}
+
+function formatSimDay(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 86400000);
+  if (date.toDateString() === today.toDateString()) return 'Hari ini';
+  if (date.toDateString() === yesterday.toDateString()) return 'Kemarin';
+  return date.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function roomPreviewText(room) {
+  if (!room.last_message) return 'Belum ada pesan';
+  const body = String(room.last_message.body || '').replace(/\s+/g, ' ').trim();
+  if (!body) return 'Pesan kosong';
+  const prefix = room.last_message.sender_type === 'ADMIN'
+    ? 'Anda: '
+    : (room.last_message.sender_type === 'AI' ? 'Asisten: ' : '');
+  return prefix + body;
+}
+
+function filteredSimRooms() {
+  const query = simRoomQuery.trim().toLowerCase();
+  if (!query) return simRooms;
+  return simRooms.filter((room) => {
+    return String(room.name || '').toLowerCase().includes(query)
+      || String(room.phone || '').includes(query)
+      || String(room.customer_code || '').toLowerCase().includes(query);
+  });
+}
+
+function renderSimulationRoomList() {
+  const listEl = document.getElementById('sim-room-list');
+  if (!listEl) return;
+
+  const countEl = document.getElementById('sim-room-count');
+  if (countEl) {
+    const unread = simRooms.reduce((sum, room) => sum + (Number(room.unread_count) || 0), 0);
+    countEl.innerText = `${simRooms.length} ruang${unread > 0 ? ` · ${unread} belum dibaca` : ' · semua terbaca'}`;
   }
 
-  const isComplaint = lastSimAnalysis.is_complaint;
-  const category = categoryLabels[lastSimAnalysis.category] || lastSimAnalysis.category;
-  const priority = priorityLabels[lastSimAnalysis.priority] || lastSimAnalysis.priority;
-  const priorityTone = lastSimAnalysis.priority === 'HIGH' ? 'danger' : (lastSimAnalysis.priority === 'MEDIUM' ? 'warning' : 'info');
-  const sentimentTone = lastSimAnalysis.sentiment === 'NEGATIVE' ? 'danger' : (lastSimAnalysis.sentiment === 'POSITIVE' ? 'success' : 'neutral');
+  if (simRoomsLoading && simRooms.length === 0) {
+    listEl.innerHTML = UI.loading('Memuat kotak masuk...');
+    return;
+  }
+
+  const rooms = filteredSimRooms();
+  if (rooms.length === 0) {
+    listEl.innerHTML = UI.state({
+      title: simRooms.length === 0 ? 'Belum ada pelanggan' : 'Tidak ada hasil',
+      hint: simRooms.length === 0
+        ? 'Ruang chat dibuat otomatis saat pelanggan pertama mengirim pesan dari halaman /simulasi.'
+        : 'Coba kata kunci lain atau hapus filter pencarian.'
+    });
+    return;
+  }
+
+  listEl.innerHTML = rooms.map((room) => {
+    const active = Number(room.customer_id) === Number(simActiveCustomerId);
+    const unread = Number(room.unread_count) || 0;
+    const archived = room.status === 'ARCHIVED';
+    return `
+      <button type="button" class="room-row${active ? ' is-active' : ''}${archived ? ' is-archived' : ''}" onclick="openSimulationRoom(${Number(room.customer_id)})">
+        <span class="room-avatar" aria-hidden="true">${escapeHtml(initialsOf(room.name))}</span>
+        <span class="room-main">
+          <span class="room-top">
+            <span class="room-name">${escapeHtml(room.name)}</span>
+            <span class="room-time">${escapeHtml(room.last_message ? formatSimRoomTime(room.last_message.created_at) : '')}</span>
+          </span>
+          <span class="room-preview">${escapeHtml(roomPreviewText(room))}</span>
+          <span class="room-meta">
+            <span class="room-source">${escapeHtml(sourceLabels[room.source] || room.source || 'Lainnya')}</span>
+            ${archived ? '<span class="room-archived">Diarsipkan</span>' : ''}
+          </span>
+        </span>
+        ${unread > 0 ? `<span class="room-unread" aria-label="${unread} pesan belum dibaca">${unread > 99 ? '99+' : unread}</span>` : ''}
+      </button>
+    `;
+  }).join('');
+}
+
+function renderSimulationBubble(message) {
+  const sender = escapeHtml(message.sender_name || 'Pelanggan');
+  const body = escapeHtml(message.body || '');
+  const time = escapeHtml(formatSimClock(message.created_at));
+
+  if (message.direction === 'IN') {
+    return `
+      <div class="wa-bubble wa-in">
+        <div class="wa-sender">${sender}</div>
+        <div class="wa-text">${body}</div>
+        <div class="wa-time">${time} &middot; masuk</div>
+      </div>
+    `;
+  }
+
+  if (message.sender_type === 'AI') {
+    return `
+      <div class="wa-bubble wa-out wa-auto">
+        <div class="wa-sender">Bro Chicken Assistant &middot; otomatis</div>
+        <div class="wa-text">${body}</div>
+        <div class="wa-time">${time} &middot; terkirim</div>
+      </div>
+    `;
+  }
 
   return `
-    <div class="inspector">
-      <div class="inspector-row">
-        <span class="inspector-label">Tipe pesan</span>
-        <span class="inspector-value">${UI.badge(isComplaint ? 'Keluhan resmi' : 'Pertanyaan umum', isComplaint ? 'danger' : 'success')}</span>
+    <div class="wa-bubble wa-out">
+      <div class="wa-sender">${sender} &middot; staf Bro Chicken</div>
+      <div class="wa-text">${body}</div>
+      <div class="wa-time">${time} &middot; terkirim</div>
+    </div>
+  `;
+}
+
+function renderSimulationThreadMessages() {
+  const messages = simThread.messages || [];
+  if (messages.length === 0) {
+    const name = simThread.customer ? simThread.customer.name : 'Pelanggan ini';
+    return `
+      <div class="thread-empty">
+        <div class="thread-empty-title">Belum ada pesan</div>
+        <p class="thread-empty-text">${escapeHtml(name)} sudah memiliki ruang chat. Percakapan akan muncul saat pelanggan mengirim pesan dari halaman simulasi pelanggan.</p>
+        <a class="btn btn-secondary btn-sm" href="/simulasi${simThread.customer ? `?phone=${encodeURIComponent(simThread.customer.phone)}&name=${encodeURIComponent(simThread.customer.name)}` : ''}" target="_blank" rel="noopener">Buka layar pelanggan</a>
       </div>
-      <div class="inspector-row">
-        <span class="inspector-label">Kategori</span>
-        <span class="inspector-value">${escapeHtml(category || '-')}</span>
+    `;
+  }
+
+  let lastDay = '';
+  return messages.map((message) => {
+    const day = formatSimDay(message.created_at);
+    const divider = day && day !== lastDay ? `<div class="wa-day">${escapeHtml(day)}</div>` : '';
+    lastDay = day;
+    return divider + renderSimulationBubble(message);
+  }).join('');
+}
+
+function renderSimulationThread() {
+  const panel = document.getElementById('sim-thread-panel');
+  if (!panel) return;
+
+  const room = currentSimRoom();
+  if (!room) {
+    panel.innerHTML = `
+      <div class="thread-empty thread-empty--room">
+        <div class="thread-empty-inner">
+          <div class="thread-empty-title">Pilih percakapan</div>
+          <p class="thread-empty-text">Semua pelanggan di database tampil sebagai ruang chat. Pilih satu ruang untuk membaca percakapan dan membalas sebagai admin.</p>
+        </div>
       </div>
-      <div class="inspector-row">
-        <span class="inspector-label">Prioritas</span>
-        <span class="inspector-value">${UI.badge(priority || '-', priorityTone)}</span>
+    `;
+    return;
+  }
+
+  const customer = simThread.customer || room;
+  const archived = room.status === 'ARCHIVED';
+
+  panel.innerHTML = `
+    <div class="thread-head">
+      <div class="thread-head-main">
+        <button type="button" class="btn btn-quiet btn-sm thread-back" onclick="closeSimulationRoom()" aria-label="Kembali ke daftar chat">&larr;</button>
+        <span class="room-avatar room-avatar--head" aria-hidden="true">${escapeHtml(initialsOf(customer.name))}</span>
+        <div class="thread-identity">
+          <div class="thread-name">${escapeHtml(customer.name)}</div>
+          <div class="thread-meta">
+            ${escapeHtml(customer.phone)}
+            <span class="thread-meta-sep">&middot;</span>
+            ${escapeHtml(customer.customer_code || '-')}
+            ${archived ? '<span class="badge badge-warning badge-inline">Diarsipkan</span>' : ''}
+          </div>
+        </div>
       </div>
-      <div class="inspector-row">
-        <span class="inspector-label">Sentimen</span>
-        <span class="inspector-value">${UI.badge(lastSimAnalysis.sentiment || '-', sentimentTone)}</span>
+      <div class="thread-head-actions">
+        <a class="btn btn-secondary btn-sm thread-customer-link" href="/simulasi?phone=${encodeURIComponent(customer.phone)}&name=${encodeURIComponent(customer.name)}" target="_blank" rel="noopener">Layar pelanggan</a>
+        <button type="button" class="btn btn-quiet btn-sm" onclick="toggleSimulationContext()" aria-expanded="${simContextCollapsed ? 'false' : 'true'}">
+          ${simContextCollapsed ? 'Info CRM' : 'Tutup info'}
+        </button>
       </div>
-      <div class="inspector-block">
-        <div class="inspector-title">Ringkasan masalah</div>
-        <div class="notice">${escapeHtml(lastSimAnalysis.extracted_problem || '-')}</div>
+    </div>
+
+    <div class="thread-feed" id="sim-thread-feed">
+      ${simThreadLoading ? UI.loading('Memuat percakapan...') : renderSimulationThreadMessages()}
+    </div>
+
+    <form class="thread-composer" onsubmit="handleSendAdminReply(event)">
+      <input type="text" id="sim-admin-reply" placeholder="Balas sebagai ${escapeHtml(currentUser ? currentUser.name : 'admin')}..." autocomplete="off">
+      <button type="submit" class="wa-send" id="sim-reply-button">Kirim</button>
+    </form>
+  `;
+
+  scrollSimulationThreadToBottom();
+}
+
+function renderSimulationContext() {
+  const panel = document.getElementById('sim-context-panel');
+  if (!panel) return;
+
+  const room = currentSimRoom();
+  if (!room) {
+    panel.innerHTML = `
+      <div class="context-head">
+        <div>
+          <div class="context-eyebrow">Konteks CRM</div>
+          <div class="context-title">Belum ada ruang dipilih</div>
+        </div>
+      </div>
+      <div class="context-body">
+        ${UI.state({
+          title: 'Pilih percakapan',
+          hint: 'Profil pelanggan, analisis triage, dan tiket terbaru muncul di sini.'
+        })}
+      </div>
+    `;
+    return;
+  }
+
+  const customer = simThread.customer || room;
+  const analysis = simThread.analysis;
+  const ticket = simThread.latest_ticket;
+
+  const analysisHtml = !analysis ? `
+    ${UI.state({
+      title: 'Belum ada analisis',
+      hint: 'Triage berjalan saat pelanggan mengirim pesan dari halaman simulasi.'
+    })}
+  ` : (() => {
+    const isComplaint = analysis.is_complaint;
+    const category = categoryLabels[analysis.category] || analysis.category || '-';
+    const priority = priorityLabels[analysis.priority] || analysis.priority || '-';
+    const priorityTone = analysis.priority === 'HIGH' ? 'danger' : (analysis.priority === 'MEDIUM' ? 'warning' : 'info');
+    const sentimentTone = analysis.sentiment === 'NEGATIVE' ? 'danger' : (analysis.sentiment === 'POSITIVE' ? 'success' : 'neutral');
+    return `
+      <div class="inspector">
+        <div class="inspector-row">
+          <span class="inspector-label">Tipe pesan</span>
+          <span class="inspector-value">${UI.badge(isComplaint ? 'Keluhan resmi' : 'Pertanyaan umum', isComplaint ? 'danger' : 'success')}</span>
+        </div>
+        <div class="inspector-row">
+          <span class="inspector-label">Kategori</span>
+          <span class="inspector-value">${escapeHtml(category)}</span>
+        </div>
+        <div class="inspector-row">
+          <span class="inspector-label">Prioritas</span>
+          <span class="inspector-value">${UI.badge(priority, priorityTone)}</span>
+        </div>
+        <div class="inspector-row">
+          <span class="inspector-label">Sentimen</span>
+          <span class="inspector-value">${UI.badge(analysis.sentiment || '-', sentimentTone)}</span>
+        </div>
+        <div class="inspector-block">
+          <div class="inspector-title">Ringkasan masalah</div>
+          <div class="notice">${escapeHtml(analysis.extracted_problem || '-')}</div>
+        </div>
+        <div class="inspector-foot">Mesin: ${escapeHtml(analysis.engine || 'rule-based')}</div>
+      </div>
+    `;
+  })();
+
+  const ticketHtml = !ticket ? `
+    ${UI.state({
+      title: 'Belum ada tiket',
+      hint: 'Tiket CRM dibuat otomatis saat triage mendeteksi keluhan.'
+    })}
+  ` : (() => {
+    const sla = getSlaRemaining(ticket.sla_due_at);
+    return `
+      <div class="ticket-summary">
+        <div class="ticket-code">#${escapeHtml(ticket.ticket_code)}</div>
+        <div class="ticket-badge-row">${statusBadge(ticket.status)} ${priorityBadge(ticket.priority)}</div>
+        <div class="ticket-line"><strong>PIC:</strong> ${escapeHtml(ticket.assigned_to_name || 'Admin')}</div>
+        <div class="ticket-line">
+          <strong>Batas respons:</strong>
+          <span id="sim-sla-countdown" class="badge ${sla.badgeClass}">${escapeHtml(sla.label)}</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-block mt-2" onclick="navigate('complaint-detail', ${Number(ticket.id)})">Buka tiket di CRM</button>
+      </div>
+    `;
+  })();
+
+  panel.innerHTML = `
+    <div class="context-head">
+      <div>
+        <div class="context-eyebrow">Konteks CRM</div>
+        <div class="context-title">${escapeHtml(customer.name)}</div>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm" onclick="toggleSimulationContext()">Tutup</button>
+    </div>
+    <div class="context-body">
+      <div class="context-profile">
+        <span class="avatar" aria-hidden="true">${escapeHtml(initialsOf(customer.name))}</span>
+        <div class="context-profile-main">
+          <div class="context-profile-name">${escapeHtml(customer.name)}</div>
+          <div class="context-profile-phone">${escapeHtml(customer.phone)}</div>
+        </div>
+      </div>
+
+      <div class="context-meta-grid">
+        <div class="context-meta-item">
+          <span class="context-meta-label">Kode pelanggan</span>
+          <span class="context-meta-value">${escapeHtml(customer.customer_code || '-')}</span>
+        </div>
+        <div class="context-meta-item">
+          <span class="context-meta-label">Kanal</span>
+          <span class="context-meta-value">${escapeHtml(sourceLabels[customer.source] || customer.source || '-')}</span>
+        </div>
+        <div class="context-meta-item">
+          <span class="context-meta-label">Status</span>
+          <span class="context-meta-value">${customer.status === 'ARCHIVED' ? UI.badge('Diarsipkan', 'warning') : UI.badge('Aktif', 'success')}</span>
+        </div>
+        <div class="context-meta-item">
+          <span class="context-meta-label">Bergabung</span>
+          <span class="context-meta-value">${escapeHtml(UI.formatDateIndo(customer.joined_at))}</span>
+        </div>
+      </div>
+
+      <button type="button" class="btn btn-secondary btn-block" onclick="navigate('customer-detail', ${Number(customer.id || customer.customer_id)})">Buka profil pelanggan</button>
+
+      <div class="context-section">
+        <div class="context-section-title">Analisis triage</div>
+        ${analysisHtml}
+      </div>
+
+      <div class="context-section">
+        <div class="context-section-title">Tiket terbaru</div>
+        ${ticketHtml}
       </div>
     </div>
   `;
+
+  startSimSlaTicker();
+}
+
+function syncSimulationInboxClasses() {
+  const inbox = document.getElementById('sim-inbox');
+  if (!inbox) return;
+  inbox.classList.toggle('has-active-room', simActiveCustomerId != null);
+  inbox.classList.toggle('is-context-collapsed', simContextCollapsed);
+  inbox.classList.toggle('is-context-open', !simContextCollapsed && simActiveCustomerId != null);
+}
+
+function scrollSimulationThreadToBottom() {
+  setTimeout(() => {
+    const el = document.getElementById('sim-thread-feed');
+    if (el) el.scrollTop = el.scrollHeight;
+  }, 50);
+}
+
+function toggleSimulationContext() {
+  setSimulationContext(simContextCollapsed);
+}
+
+function setSimulationContext(open) {
+  simContextCollapsed = !open;
+  syncSimulationInboxClasses();
+  const threadPanel = document.querySelector('.thread-head-actions button[aria-expanded]');
+  if (threadPanel) threadPanel.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) renderSimulationContext();
+}
+
+function handleSimRoomSearch(value) {
+  simRoomQuery = value || '';
+  renderSimulationRoomList();
+}
+
+async function loadSimulationRooms() {
+  simRoomsLoading = true;
+  if (simRooms.length === 0) renderSimulationRoomList();
+
+  try {
+    const res = await fetch('/api/simulation/rooms');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Gagal memuat ruang chat.');
+    simRooms = data.rooms || data.data || [];
+  } catch (err) {
+    showToast(err.message || 'Gagal memuat kotak masuk.', 'error');
+  } finally {
+    simRoomsLoading = false;
+    renderSimulationRoomList();
+  }
+}
+
+async function loadSimulationThread(customerId, options = {}) {
+  const requestedId = Number(customerId);
+  simThreadLoading = true;
+  renderSimulationThread();
+
+  try {
+    const res = await fetch(`/api/simulation/rooms/${requestedId}/messages`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Gagal memuat percakapan.');
+
+    if (Number(simActiveCustomerId) !== requestedId) return;
+
+    simThread = {
+      customer: data.customer,
+      messages: data.messages || [],
+      analysis: data.analysis || null,
+      latest_ticket: data.latest_ticket || null
+    };
+
+    const room = currentSimRoom();
+    if (room) {
+      room.latest_ticket = data.latest_ticket || room.latest_ticket;
+      const unread = Number(room.unread_count) || 0;
+      if (unread > 0 && options.markRead !== false) {
+        markSimulationRoomRead(requestedId);
+      }
+    }
+  } catch (err) {
+    if (Number(simActiveCustomerId) === requestedId) {
+      showToast(err.message || 'Gagal memuat percakapan.', 'error');
+    }
+  } finally {
+    if (Number(simActiveCustomerId) === requestedId) {
+      simThreadLoading = false;
+      renderSimulationThread();
+      renderSimulationContext();
+      syncSimulationInboxClasses();
+    }
+  }
+}
+
+async function markSimulationRoomRead(customerId) {
+  try {
+    const res = await fetch(`/api/simulation/rooms/${Number(customerId)}/read`, { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) return;
+    const room = simRooms.find((item) => Number(item.customer_id) === Number(customerId));
+    if (room) room.unread_count = 0;
+    renderSimulationRoomList();
+  } catch (err) {}
+}
+
+async function openSimulationRoom(customerId, options = {}) {
+  const room = simRooms.find((item) => Number(item.customer_id) === Number(customerId));
+  if (!room) {
+    showToast('Ruang chat tidak ditemukan.', 'error');
+    return;
+  }
+
+  simActiveCustomerId = Number(customerId);
+  simThread = {
+    customer: room,
+    messages: [],
+    analysis: null,
+    latest_ticket: room.latest_ticket || null
+  };
+  simContextCollapsed = window.innerWidth < 1280;
+
+  if (options.updateHash !== false) {
+    const hash = `#simulation/${Number(customerId)}`;
+    if (window.location.hash !== hash) {
+      window.history.pushState({ route: 'simulation', id: Number(customerId) }, '', hash);
+    }
+  }
+
+  renderSimulationRoomList();
+  renderSimulationThread();
+  renderSimulationContext();
+  syncSimulationInboxClasses();
+  await loadSimulationThread(customerId);
+}
+
+function closeSimulationRoom() {
+  simActiveCustomerId = null;
+  simThread = { customer: null, messages: [], analysis: null, latest_ticket: null };
+  simContextCollapsed = window.innerWidth < 1280;
+  if (window.location.hash !== '#simulation') {
+    window.history.pushState({ route: 'simulation' }, '', '#simulation');
+  }
+  renderSimulationRoomList();
+  renderSimulationThread();
+  renderSimulationContext();
+  syncSimulationInboxClasses();
+}
+
+async function refreshSimulationInbox(options = {}) {
+  if (currentRoute !== 'simulation') return;
+  const activeId = simActiveCustomerId;
+  await loadSimulationRooms();
+
+  if (activeId && simRooms.some((room) => Number(room.customer_id) === Number(activeId))) {
+    if (options.reloadThread !== false) {
+      await loadSimulationThread(activeId, { markRead: false });
+    }
+  } else if (activeId) {
+    simActiveCustomerId = null;
+    simThread = { customer: null, messages: [], analysis: null, latest_ticket: null };
+    renderSimulationThread();
+    renderSimulationContext();
+  }
+
+  syncSimulationInboxClasses();
+  if (!options.quiet) renderSimulationRoomList();
 }
 
 function getSlaRemaining(dueIso) {
@@ -2136,18 +2512,17 @@ function getSlaRemaining(dueIso) {
   };
 }
 
-let simSlaTicker = null;
-
 function updateSimSlaCountdown() {
   const el = document.getElementById('sim-sla-countdown');
-  if (!el || !lastSimTicket || !lastSimTicket.sla_due_at) {
-    if (simSlaTicker) {
+  const ticket = simThread.latest_ticket;
+  if (!el || !ticket || !ticket.sla_due_at) {
+    if (simSlaTicker && !el) {
       clearInterval(simSlaTicker);
       simSlaTicker = null;
     }
     return;
   }
-  const sla = getSlaRemaining(lastSimTicket.sla_due_at);
+  const sla = getSlaRemaining(ticket.sla_due_at);
   el.className = `badge ${sla.badgeClass}`;
   el.innerText = sla.label;
 }
@@ -2158,330 +2533,130 @@ function startSimSlaTicker() {
   updateSimSlaCountdown();
 }
 
-function renderSimTicketContent() {
-  if (!lastSimTicket) {
-    return UI.state({
-      title: 'Tiket belum dibuat',
-      hint: 'Kirim pesan berisi komplain agar triage membuat tiket resmi.'
-    });
-  }
-
-  const status = lastSimTicket.status || 'NEW';
-  const sla = getSlaRemaining(lastSimTicket.sla_due_at);
-
-  return `
-    <div class="ticket-summary">
-      <div class="ticket-code">#${escapeHtml(lastSimTicket.ticket_code)}</div>
-      <div>${statusBadge(status)}</div>
-      <div class="ticket-line">
-        <strong>Pelanggan:</strong>
-        ${escapeHtml(lastSimCustomer ? lastSimCustomer.name : 'Pelanggan')}
-        (${escapeHtml(lastSimCustomer ? lastSimCustomer.customer_code : '-')})
-      </div>
-      <div class="ticket-line">
-        <strong>Batas respons:</strong> 60 menit
-        <span id="sim-sla-countdown" class="badge ${sla.badgeClass}">${escapeHtml(sla.label)}</span>
-      </div>
-      <div class="ticket-line"><strong>PIC:</strong> ${escapeHtml(lastSimTicket.assigned_to_name || 'Admin')}</div>
-      <button type="button" class="btn btn-primary btn-block" onclick="navigate('complaint-detail', ${Number(lastSimTicket.id)})">Buka tiket di CRM</button>
-    </div>
-  `;
-}
-
-function scrollSimChatToBottom() {
-  setTimeout(() => {
-    const el = document.getElementById('sim-chat-body');
-    if (el) el.scrollTop = el.scrollHeight;
-  }, 50);
-}
-
-function applySimulationSample(idx) {
-  const sample = simSamples[idx];
-  if (!sample) return;
-
-  document.getElementById('sim-name').value = sample.name;
-  document.getElementById('sim-phone').value = sample.phone;
-  document.getElementById('sim-source').value = sample.source;
-  document.getElementById('sim-chat-input').value = sample.message;
-  document.getElementById('sim-chat-input').focus();
-}
-
-async function handleSimSend() {
-  if (isSimLoading) return;
-
-  const inputEl = document.getElementById('sim-chat-input');
-  const message = inputEl.value.trim();
-  if (!message) return;
-
-  const name = document.getElementById('sim-name').value.trim() || 'Pelanggan';
-  const phone = document.getElementById('sim-phone').value.trim() || '081299887711';
-  const source = document.getElementById('sim-source').value;
-
-  simMessages.push({
-    sender: 'cust',
-    name,
-    text: message,
-    time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  });
-
-  inputEl.value = '';
-  isSimLoading = true;
-
-  const chatBody = document.getElementById('sim-chat-body');
-  if (chatBody) {
-    chatBody.innerHTML = renderSimChatBubbles();
-    scrollSimChatToBottom();
-  }
-
-  try {
-    const res = await fetch('/api/simulation/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, phone, source, message })
-    });
-    const data = await res.json();
-    isSimLoading = false;
-
-    if (data.success) {
-      lastSimAnalysis = data.analysis;
-      lastSimCustomer = data.customer;
-      lastSimTicket = data.ticket;
-
-      simMessages.push({
-        sender: 'ai',
-        text: data.reply,
-        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-      });
-
-      if (data.ticket) {
-        showToast(`Tiket #${data.ticket.ticket_code} dibuat oleh triage.`);
-      } else {
-        showToast('Pesan direspons oleh asisten.', 'info');
-      }
-    } else {
-      showToast(data.error || 'Gagal memproses simulasi.', 'error');
-    }
-  } catch (err) {
-    isSimLoading = false;
-    showToast('Kendala koneksi ke server simulasi.', 'error');
-  }
-
-  const updatedChatBody = document.getElementById('sim-chat-body');
-  if (updatedChatBody) {
-    updatedChatBody.innerHTML = renderSimChatBubbles();
-    scrollSimChatToBottom();
-  }
-
-  const inspectorEl = document.getElementById('sim-inspector-content');
-  if (inspectorEl) inspectorEl.innerHTML = renderSimInspectorContent();
-
-  const engineBadgeEl = document.getElementById('sim-engine-badge');
-  if (engineBadgeEl && lastSimAnalysis) engineBadgeEl.innerText = lastSimAnalysis.engine || 'Analisis selesai';
-
-  const ticketContentEl = document.getElementById('sim-ticket-content');
-  if (ticketContentEl) ticketContentEl.innerHTML = renderSimTicketContent();
-
-  const ticketBadgeEl = document.getElementById('sim-ticket-badge');
-  if (ticketBadgeEl && lastSimTicket) ticketBadgeEl.innerText = `Terdaftar #${lastSimTicket.ticket_code}`;
-}
-
-async function handleSendAdminReply() {
-  const replyInput = document.getElementById('admin-reply-input');
+async function handleSendAdminReply(event) {
+  if (event) event.preventDefault();
+  const replyInput = document.getElementById('sim-admin-reply');
   if (!replyInput) return;
+
+  const room = currentSimRoom();
+  if (!room) {
+    showToast('Pilih ruang chat terlebih dahulu.', 'error');
+    return;
+  }
 
   const message = replyInput.value.trim();
   if (!message) {
     showToast('Ketik pesan balasan terlebih dahulu.', 'error');
+    replyInput.focus();
     return;
   }
 
-  const targetPhone = lastSimCustomer ? lastSimCustomer.phone : '081299887711';
-  const ticketId = lastSimTicket ? lastSimTicket.id : null;
+  const button = document.getElementById('sim-reply-button');
+  if (button) button.disabled = true;
 
   try {
     const res = await fetch('/api/simulation/admin/reply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        phone: targetPhone,
-        ticket_id: ticketId,
+        phone: room.phone,
+        ticket_id: simThread.latest_ticket ? simThread.latest_ticket.id : null,
         message
       })
     });
 
     const data = await res.json();
-    if (data.success) {
-      simMessages.push({
-        sender: 'admin',
-        name: currentUser.name,
-        text: message,
-        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-      });
-
-      replyInput.value = '';
-
-      if (lastSimTicket) {
-        lastSimTicket.status = 'IN_PROGRESS';
-        if (!lastSimTicket.first_response_at) {
-          lastSimTicket.first_response_at = new Date().toISOString();
-        }
-      }
-
-      const chatBody = document.getElementById('sim-chat-body');
-      if (chatBody) {
-        chatBody.innerHTML = renderSimChatBubbles();
-        scrollSimChatToBottom();
-      }
-
-      const ticketContentEl = document.getElementById('sim-ticket-content');
-      if (ticketContentEl) {
-        ticketContentEl.innerHTML = renderSimTicketContent();
-        startSimSlaTicker();
-      }
-
-      showToast('Balasan terkirim ke layar pelanggan.');
-    } else {
+    if (!data.success) {
       showToast(data.error || 'Gagal mengirim balasan admin.', 'error');
+      return;
     }
+
+    replyInput.value = '';
+    await refreshSimulationInbox({ reloadThread: true, quiet: true });
+    showToast(`Balasan terkirim ke ${room.name}.`);
+    const nextInput = document.getElementById('sim-admin-reply');
+    if (nextInput) nextInput.focus();
   } catch (err) {
     showToast('Kendala jaringan saat mengirim balasan.', 'error');
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
-function setAdminQuickReply(text) {
-  const replyInput = document.getElementById('admin-reply-input');
-  if (replyInput) {
-    replyInput.value = text;
-    replyInput.focus();
-  }
-}
-
-async function renderSimulation() {
+async function renderSimulation(customerId) {
   const container = document.getElementById('content-area');
+  if (!container) return;
   initAdminSSE();
 
-  if (simSamples.length === 0) {
-    try {
-      const res = await fetch('/api/simulation/samples');
-      const data = await res.json();
-      if (data.success) simSamples = data.data;
-    } catch (err) {}
-  }
+  const token = ++simRenderToken;
+  simRoomsLoading = true;
 
   container.innerHTML = `
     ${UI.pageHeader({
-      title: 'Simulasi WhatsApp',
-      description: 'Konsol dua layar: pelanggan mengirim pesan, admin membalas langsung.',
+      title: 'Kotak masuk WhatsApp',
+      description: 'Percakapan pelanggan Bro Chicken dalam satu kotak masuk admin.',
+      actions: `<a class="btn btn-secondary" href="/simulasi" target="_blank" rel="noopener">Buka layar pelanggan</a>`
+    })}
+    <div class="notice notice-info inbox-notice">
+      <strong>Mode simulasi.</strong> Pesan masuk hanya dari halaman publik <code>/simulasi</code>. Tidak ada koneksi ke WhatsApp API asli.
+    </div>
+    <div class="panel">${UI.loading('Memuat kotak masuk...')}</div>
+  `;
+
+  await loadSimulationRooms();
+  if (token !== simRenderToken || currentRoute !== 'simulation') return;
+
+  const requestedId = customerId != null ? Number(customerId) : null;
+  const available = requestedId != null && simRooms.some((room) => Number(room.customer_id) === requestedId);
+  simActiveCustomerId = available ? requestedId : null;
+  simThread = { customer: null, messages: [], analysis: null, latest_ticket: null };
+  simThreadLoading = false;
+  simContextCollapsed = window.innerWidth < 1280;
+
+  container.innerHTML = `
+    ${UI.pageHeader({
+      title: 'Kotak masuk WhatsApp',
+      description: 'Percakapan pelanggan Bro Chicken dalam satu kotak masuk admin.',
       actions: `<a class="btn btn-secondary" href="/simulasi" target="_blank" rel="noopener">Buka layar pelanggan</a>`
     })}
 
-    <div class="notice notice-info">
-      <strong>Mode simulasi.</strong> Pesan pelanggan dan balasan admin tampil real-time di kedua layar. Tidak ada koneksi ke WhatsApp API asli.
+    <div class="notice notice-info inbox-notice">
+      <strong>Mode simulasi.</strong> Pesan masuk hanya dari halaman publik <code>/simulasi</code>. Tidak ada koneksi ke WhatsApp API asli.
     </div>
 
-    <div class="toolbar mt-4">
-      <div class="toolbar-group">
-        <span class="toolbar-label">Skenario cepat</span>
-        <div class="chip-row" id="sim-preset-chips">
-          ${simSamples.map((s, idx) => `
-            <button type="button" class="chip" onclick="applySimulationSample(${idx})" title="${escapeHtml(s.badge || '')}">${escapeHtml(s.title)}</button>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-
-    <div class="simulation-grid">
-      <div class="wa-canvas">
-        <div class="wa-head">
-          <div class="wa-head-left">
-            <img src="/images/logo.png" alt="" class="wa-avatar">
+    <div class="inbox" id="sim-inbox">
+      <aside class="inbox-list" aria-label="Daftar ruang chat">
+        <div class="inbox-list-head">
+          <div class="inbox-list-title-row">
             <div>
-              <div class="wa-name">Bro Chicken Customer Care</div>
-              <div class="wa-status"><span class="wa-dot"></span><span>Simulasi real-time</span></div>
+              <div class="inbox-eyebrow">Kotak masuk</div>
+              <div class="inbox-count" id="sim-room-count">Memuat...</div>
             </div>
+            <button type="button" class="btn btn-quiet btn-sm" onclick="refreshSimulationInbox({ reloadThread: true })">Muat ulang</button>
           </div>
-          <span class="wa-mode">POV admin</span>
+          <label class="inbox-search">
+            <span class="sr-only">Cari ruang chat</span>
+            <input type="search" id="sim-room-search" placeholder="Cari nama, nomor, atau kode" value="${escapeHtml(simRoomQuery)}" oninput="handleSimRoomSearch(this.value)">
+          </label>
         </div>
+        <div class="room-list" id="sim-room-list"></div>
+      </aside>
 
-        <div class="wa-config">
-          <div class="wa-field">
-            <label for="sim-name">Nama pelanggan</label>
-            <input type="text" id="sim-name" value="Rian Pratama">
-          </div>
-          <div class="wa-field">
-            <label for="sim-phone">Nomor WhatsApp</label>
-            <input type="text" id="sim-phone" value="081299887711">
-          </div>
-          <div class="wa-field">
-            <label for="sim-source">Kanal</label>
-            <select id="sim-source">
-              <option value="GOFOOD">GoFood</option>
-              <option value="GRABFOOD">GrabFood</option>
-              <option value="DIRECT">Beli langsung</option>
-              <option value="OTHER">Lainnya</option>
-            </select>
-          </div>
-        </div>
+      <section class="inbox-thread" id="sim-thread-panel" aria-label="Percakapan"></section>
 
-        <div class="wa-feed" id="sim-chat-body">${renderSimChatBubbles()}</div>
-
-        <div class="wa-composer">
-          <input type="text" id="sim-chat-input" placeholder="Ketik pesan pelanggan..." onkeydown="if(event.key === 'Enter') handleSimSend()">
-          <button type="button" class="wa-send" onclick="handleSimSend()">Kirim</button>
-        </div>
-      </div>
-
-      <div class="simulation-side">
-        <div class="panel">
-          <div class="panel-head">
-            <div class="panel-title">Analisis triage</div>
-            <span class="badge badge-neutral" id="sim-engine-badge">${escapeHtml(lastSimAnalysis ? (lastSimAnalysis.engine || 'Analisis selesai') : 'Belum ada analisis')}</span>
-          </div>
-          <div id="sim-inspector-content">${renderSimInspectorContent()}</div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head">
-            <div class="panel-title">Tiket CRM</div>
-            <span class="badge badge-neutral" id="sim-ticket-badge">${lastSimTicket ? `Terdaftar #${escapeHtml(lastSimTicket.ticket_code)}` : 'Menunggu input'}</span>
-          </div>
-          <div id="sim-ticket-content">${renderSimTicketContent()}</div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head">
-            <div class="panel-title">Balas pelanggan</div>
-            <span class="badge badge-neutral">Human-in-the-loop</span>
-          </div>
-          <div class="ticket-line mb-2">
-            Target: <strong id="admin-reply-target-name">${escapeHtml(lastSimCustomer ? lastSimCustomer.name : 'Rian Pratama')}</strong>
-          </div>
-          <textarea id="admin-reply-input" class="textarea" placeholder="Tulis balasan staf admin untuk pelanggan."></textarea>
-          <div class="chip-row mt-2">
-            <button type="button" class="chip" onclick="setAdminQuickReply('Baik Kak, kami konfirmasi ke dapur dan segera kirimkan porsi pengganti sekarang ya.')">Kirim pengganti</button>
-            <button type="button" class="chip" onclick="setAdminQuickReply('Mohon maaf atas ketidaknyamanannya, kami proses pengembalian dana sekarang ya Kak.')">Proses refund</button>
-            <button type="button" class="chip" onclick="setAdminQuickReply('Mohon infokan nomor pesanan dan foto paket yang Kakak terima ya.')">Minta foto pesanan</button>
-          </div>
-          <button type="button" class="btn btn-primary btn-block mt-3" onclick="handleSendAdminReply()">Kirim balasan</button>
-        </div>
-
-        <details class="disclosure">
-          <summary>Alur dua arah</summary>
-          <div class="disclosure-body">
-            <ol>
-              <li>Pelanggan membuka <code>/simulasi</code> dan mengirim pesan tanpa login.</li>
-              <li>Triage mengklasifikasikan pesan dan membuat tiket dengan batas respons 60 menit.</li>
-              <li>Pesan masuk ke layar admin melalui SSE.</li>
-              <li>Admin membalas, dan balasan muncul di layar pelanggan secara real-time.</li>
-            </ol>
-          </div>
-        </details>
-      </div>
+      <aside class="inbox-context" id="sim-context-panel" aria-label="Konteks CRM"></aside>
+      <div class="inbox-context-scrim" onclick="setSimulationContext(false)"></div>
     </div>
   `;
 
-  scrollSimChatToBottom();
-  startSimSlaTicker();
+  renderSimulationRoomList();
+  renderSimulationThread();
+  renderSimulationContext();
+  syncSimulationInboxClasses();
+
+  if (simActiveCustomerId) {
+    await loadSimulationThread(simActiveCustomerId);
+  }
 }
 
 // -------------------------------------------------------------

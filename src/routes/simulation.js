@@ -59,6 +59,138 @@ const SAMPLES = [
   }
 ];
 
+// Helper: normalisasi hasil analisis yang tersimpan sebagai JSON.
+function parseAnalysisJson(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch (err) {
+    return null;
+  }
+}
+
+// Helper: bentuk pesan simulasi yang aman dikirim ke klien.
+function serializeSimulationMessage(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    customer_id: row.customer_id,
+    phone: row.phone,
+    direction: row.direction,
+    sender_type: row.sender_type,
+    sender_name: row.sender_name,
+    body: row.body,
+    ticket_id: row.ticket_id,
+    analysis: parseAnalysisJson(row.analysis_json),
+    read_at: row.read_at,
+    created_at: row.created_at
+  };
+}
+
+// Helper: simpan satu pesan ke ruang simulasi pelanggan.
+function insertSimulationMessage(db, data) {
+  const createdAt = data.createdAt || new Date().toISOString();
+  const result = db.prepare(`
+    INSERT INTO simulation_messages (
+      customer_id, phone, direction, sender_type, sender_name, body,
+      ticket_id, analysis_json, read_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    data.customerId,
+    data.phone,
+    data.direction,
+    data.senderType,
+    data.senderName,
+    data.body,
+    data.ticketId || null,
+    data.analysis ? JSON.stringify(data.analysis) : null,
+    data.readAt || null,
+    createdAt
+  );
+
+  return db.prepare('SELECT * FROM simulation_messages WHERE id = ?').get(result.lastInsertRowid);
+}
+
+// Helper: daftar ruang chat. Satu pelanggan selalu menjadi satu ruang.
+function listSimulationRooms(db) {
+  const rows = db.prepare(`
+    SELECT
+      c.id AS customer_id,
+      c.customer_code,
+      c.name,
+      c.phone,
+      c.source,
+      c.status,
+      c.joined_at,
+      lm.id AS last_message_id,
+      lm.body AS last_message_body,
+      lm.sender_type AS last_message_sender_type,
+      lm.direction AS last_message_direction,
+      lm.created_at AS last_message_at,
+      COALESCE(unread.unread_count, 0) AS unread_count,
+      lt.id AS latest_ticket_id,
+      lt.ticket_code AS latest_ticket_code,
+      lt.status AS latest_ticket_status,
+      lt.priority AS latest_ticket_priority,
+      lt.sla_due_at AS latest_ticket_sla_due_at,
+      lt.created_at AS latest_ticket_created_at
+    FROM customers c
+    LEFT JOIN (
+      SELECT m.*
+      FROM simulation_messages m
+      INNER JOIN (
+        SELECT customer_id, MAX(id) AS max_id
+        FROM simulation_messages
+        GROUP BY customer_id
+      ) latest ON latest.max_id = m.id
+    ) lm ON lm.customer_id = c.id
+    LEFT JOIN (
+      SELECT customer_id, COUNT(*) AS unread_count
+      FROM simulation_messages
+      WHERE direction = 'IN' AND read_at IS NULL
+      GROUP BY customer_id
+    ) unread ON unread.customer_id = c.id
+    LEFT JOIN (
+      SELECT x.*
+      FROM complaints x
+      INNER JOIN (
+        SELECT customer_id, MAX(id) AS max_id
+        FROM complaints
+        GROUP BY customer_id
+      ) latest_ticket ON latest_ticket.max_id = x.id
+    ) lt ON lt.customer_id = c.id
+    ORDER BY CASE WHEN lm.id IS NULL THEN 1 ELSE 0 END ASC,
+      lm.id DESC,
+      c.name COLLATE NOCASE ASC
+  `).all();
+
+  return rows.map((row) => ({
+    customer_id: row.customer_id,
+    customer_code: row.customer_code,
+    name: row.name,
+    phone: row.phone,
+    source: row.source,
+    status: row.status,
+    joined_at: row.joined_at,
+    unread_count: Number(row.unread_count) || 0,
+    last_message: row.last_message_id ? {
+      id: row.last_message_id,
+      body: row.last_message_body,
+      sender_type: row.last_message_sender_type,
+      direction: row.last_message_direction,
+      created_at: row.last_message_at
+    } : null,
+    latest_ticket: row.latest_ticket_id ? {
+      id: row.latest_ticket_id,
+      ticket_code: row.latest_ticket_code,
+      status: row.latest_ticket_status,
+      priority: row.latest_ticket_priority,
+      sla_due_at: row.latest_ticket_sla_due_at,
+      created_at: row.latest_ticket_created_at
+    } : null
+  }));
+}
+
 // Helper: Proses Chat Pelanggan (Bisa dipanggil dari rute publik maupun privat)
 async function processCustomerChat(req, res) {
   try {
@@ -173,9 +305,41 @@ async function processCustomerChat(req, res) {
       };
     }
 
+    // 4. Simpan percakapan ke ruang simulasi agar tetap ada setelah halaman dimuat ulang
+    const inboundCreatedAt = new Date().toISOString();
+    const inboundRecord = insertSimulationMessage(db, {
+      customerId: customer.id,
+      phone: customer.phone,
+      direction: 'IN',
+      senderType: 'CUSTOMER',
+      senderName: customer.name,
+      body: message.trim(),
+      ticketId: ticket ? ticket.id : null,
+      analysis,
+      createdAt: inboundCreatedAt
+    });
+
+    const replyRecord = insertSimulationMessage(db, {
+      customerId: customer.id,
+      phone: customer.phone,
+      direction: 'OUT',
+      senderType: 'AI',
+      senderName: 'Bro Chicken Assistant',
+      body: autoReplyText,
+      ticketId: ticket ? ticket.id : null,
+      analysis,
+      createdAt: new Date(Date.now() + 1).toISOString()
+    });
+
     const payload = {
       success: true,
       customer,
+      customer_id: customer.id,
+      message_id: inboundRecord.id,
+      messages: [
+        serializeSimulationMessage(inboundRecord),
+        serializeSimulationMessage(replyRecord)
+      ],
       ticket,
       analysis,
       message,
@@ -184,7 +348,7 @@ async function processCustomerChat(req, res) {
       timestamp: new Date().toISOString()
     };
 
-    // 4. REAL-TIME BROADCAST: Kirim event chat baru ke seluruh Admin yang sedang aktif
+    // 5. REAL-TIME BROADCAST: Kirim event chat baru ke seluruh Admin yang sedang aktif
     eventHub.broadcastToAdmins('new_customer_chat', payload);
 
     res.json(payload);
@@ -210,6 +374,39 @@ router.get('/public/stream', (req, res) => {
   eventHub.registerCustomer(normalizedPhone, res);
 });
 
+// GET /api/simulation/public/history?phone= (Riwayat chat pelanggan, tanpa login)
+router.get('/public/history', (req, res) => {
+  try {
+    const rawPhone = req.query.phone;
+    if (!rawPhone || !String(rawPhone).trim()) {
+      return res.json({ success: true, customer: null, messages: [] });
+    }
+
+    const phone = normalizePhone(rawPhone);
+    const db = getDb();
+    const customer = db.prepare('SELECT * FROM customers WHERE phone = ?').get(phone);
+    if (!customer) {
+      return res.json({ success: true, customer: null, messages: [] });
+    }
+
+    const messages = db.prepare(`
+      SELECT * FROM simulation_messages
+      WHERE customer_id = ?
+      ORDER BY id ASC
+    `).all(customer.id).map(serializeSimulationMessage);
+
+    res.json({
+      success: true,
+      customer,
+      messages,
+      data: { customer, messages }
+    });
+  } catch (err) {
+    console.error('Error /api/simulation/public/history:', err);
+    res.status(500).json({ success: false, error: 'Gagal memuat riwayat chat: ' + err.message });
+  }
+});
+
 // POST /api/simulation/public/chat (Kirim Chat Pelanggan ke Sistem)
 router.post('/public/chat', (req, res) => {
   processCustomerChat(req, res);
@@ -229,6 +426,105 @@ router.get('/admin/stream', requireAuth, (req, res) => {
   eventHub.registerAdmin(res);
 });
 
+// GET /api/simulation/rooms (Daftar seluruh ruang chat pelanggan)
+router.get('/rooms', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const rooms = listSimulationRooms(db);
+    res.json({
+      success: true,
+      data: rooms,
+      rooms,
+      total: rooms.length,
+      total_unread: rooms.reduce((sum, room) => sum + room.unread_count, 0)
+    });
+  } catch (err) {
+    console.error('Error /api/simulation/rooms:', err);
+    res.status(500).json({ success: false, error: 'Gagal memuat daftar ruang chat: ' + err.message });
+  }
+});
+
+// GET /api/simulation/rooms/:customerId/messages (Isi percakapan satu ruang)
+router.get('/rooms/:customerId/messages', requireAuth, (req, res) => {
+  try {
+    const customerId = Number(req.params.customerId);
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      return res.status(400).json({ success: false, error: 'ID pelanggan tidak valid.' });
+    }
+
+    const db = getDb();
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
+    if (!customer) {
+      return res.status(404).json({ success: false, error: 'Pelanggan tidak ditemukan.' });
+    }
+
+    const rows = db.prepare(`
+      SELECT * FROM simulation_messages
+      WHERE customer_id = ?
+      ORDER BY id ASC
+    `).all(customerId);
+
+    const messages = rows.map(serializeSimulationMessage);
+    const latestAnalysis = [...messages].reverse()
+      .map((item) => item.analysis)
+      .find(Boolean) || null;
+
+    const latestTicket = db.prepare(`
+      SELECT c.*, u.name AS assigned_to_name
+      FROM complaints c
+      LEFT JOIN users u ON c.assigned_to = u.id
+      WHERE c.customer_id = ?
+      ORDER BY c.id DESC
+      LIMIT 1
+    `).get(customerId) || null;
+
+    res.json({
+      success: true,
+      customer,
+      messages,
+      analysis: latestAnalysis,
+      latest_ticket: latestTicket,
+      data: {
+        customer,
+        messages,
+        analysis: latestAnalysis,
+        latest_ticket: latestTicket
+      }
+    });
+  } catch (err) {
+    console.error('Error /api/simulation/rooms/:customerId/messages:', err);
+    res.status(500).json({ success: false, error: 'Gagal memuat percakapan: ' + err.message });
+  }
+});
+
+// POST /api/simulation/rooms/:customerId/read (Tandai ruang sudah dibaca admin)
+router.post('/rooms/:customerId/read', requireAuth, (req, res) => {
+  try {
+    const customerId = Number(req.params.customerId);
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      return res.status(400).json({ success: false, error: 'ID pelanggan tidak valid.' });
+    }
+
+    const db = getDb();
+    const customer = db.prepare('SELECT id FROM customers WHERE id = ?').get(customerId);
+    if (!customer) {
+      return res.status(404).json({ success: false, error: 'Pelanggan tidak ditemukan.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const result = db.prepare(`
+      UPDATE simulation_messages
+      SET read_at = ?
+      WHERE customer_id = ? AND direction = 'IN' AND read_at IS NULL
+    `).run(nowIso, customerId);
+
+    res.json({ success: true, marked: Number(result.changes) || 0, read_at: nowIso });
+  } catch (err) {
+    console.error('Error /api/simulation/rooms/:customerId/read:', err);
+    res.status(500).json({ success: false, error: 'Gagal menandai ruang dibaca: ' + err.message });
+  }
+});
+
 // POST /api/simulation/admin/reply (Admin Membalas Chat Pelanggan Secara Manual)
 router.post('/admin/reply', requireAuth, (req, res) => {
   try {
@@ -245,6 +541,7 @@ router.post('/admin/reply', requireAuth, (req, res) => {
     const db = getDb();
     const adminUser = req.session.user;
     const nowIso = new Date().toISOString();
+    const customer = db.prepare('SELECT * FROM customers WHERE phone = ?').get(normalizedPhone);
 
     // Jika terkait tiket, catat aktivitas di database dan update SLA first response jika perlu
     let ticket = null;
@@ -268,13 +565,28 @@ router.post('/admin/reply', requireAuth, (req, res) => {
       }
     }
 
+    // Simpan balasan ke ruang simulasi bila nomor terdaftar sebagai pelanggan.
+    const messageRecord = customer ? insertSimulationMessage(db, {
+      customerId: customer.id,
+      phone: normalizedPhone,
+      direction: 'OUT',
+      senderType: 'ADMIN',
+      senderName: adminUser.name,
+      body: message.trim(),
+      ticketId: ticket ? ticket.id : null,
+      createdAt: nowIso
+    }) : null;
+
     const payload = {
       sender: 'admin',
       admin_name: adminUser.name,
       message: message.trim(),
       ticket_id: ticket ? ticket.id : null,
       ticket_code: ticket ? ticket.ticket_code : null,
-      timestamp: nowIso
+      timestamp: nowIso,
+      customer_id: customer ? customer.id : null,
+      message_id: messageRecord ? messageRecord.id : null,
+      simulation_message: serializeSimulationMessage(messageRecord)
     };
 
     // 1. Kirim balasan real-time langsung ke SSE tab browser pelanggan
@@ -289,6 +601,7 @@ router.post('/admin/reply', requireAuth, (req, res) => {
     res.json({
       success: true,
       delivered_to_stream: delivered,
+      ...payload,
       message: 'Balasan berhasil dikirimkan ke pelanggan.'
     });
   } catch (err) {

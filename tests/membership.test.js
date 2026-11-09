@@ -4,9 +4,9 @@ const { getDb } = require('../src/db/database');
 const membership = require('../src/services/membership');
 const { getMonthEndInfo } = membership;
 
-console.log('=== PENGUJIAN MEMBERSHIP, QR PROMO & KUPON TANGGAL TUA ===\n');
-
 const db = getDb();
+
+console.log('=== PENGUJIAN MEMBERSHIP, QR PROMO & KUPON TANGGAL TUA ===\n');
 let passCount = 0;
 let failCount = 0;
 
@@ -89,7 +89,7 @@ test('Registrasi nomor baru membuat pelanggan, membership, dan welcome message',
   assert.ok(inactive.membership.id, 'Membership harus dibuat.');
   assert.strictEqual(inactive.customer_created, true);
   assert.strictEqual(inactive.membership_created, true);
-  assert.match(inactive.membership.member_code, /^MBR-\d{4}-\d{4}$/);
+  assert.match(inactive.membership.member_code, /^MB\d{9}$/);
 
   const welcome = db.prepare(`
     SELECT * FROM member_messages

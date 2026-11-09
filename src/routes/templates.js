@@ -59,7 +59,7 @@ router.get('/', (req, res) => {
   const renderedTemplates = STATIC_TEMPLATES.map(tmpl => {
     let text = tmpl.template;
     const nameVal = customer ? customer.name : '{nama}';
-    const ticketVal = ticket ? ticket.ticket_code : (ticketId ? `TCK-${ticketId}` : '{ticket_id}');
+    const ticketVal = ticket ? ticket.ticket_code : (ticketId ? `TK+DDMMYY+${String(ticketId).padStart(3, '0')}` : '{ticket_id}');
 
     text = text.replace(/\{nama\}/g, nameVal);
     text = text.replace(/\{ticket_id\}/g, ticketVal);
