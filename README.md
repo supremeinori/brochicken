@@ -108,4 +108,5 @@ Sistem telah diinisialisasi otomatis dengan data awal (*auto-seed*):
    - Log transaksi manual tanpa POS: tanggal, kanal, dan catatan. Tidak ada nominal, pembayaran, atau stok.
    - Kupon tanggal tua 10% untuk member yang tidak bertransaksi lebih dari 14 hari, terbit pada 3 hari terakhir bulan, berlaku 7 hari.
    - Scheduler idempoten, tombol manual untuk demo, dan penandaan kupon `USED`.
+   - Tombol **Kirim Kupon** per member untuk demo: memaksa member pasif 15 hari, menerbitkan kupon, dan langsung mengirim pesan simulasi.
    - Semua pesan masuk outbox `member_messages` dengan provider `SIMULATION` dan didorong ke `/simulasi?phone=...` melalui SSE.

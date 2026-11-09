@@ -646,6 +646,72 @@ function runEndMonthPromo({ now = new Date(), force = false } = {}) {
   };
 }
 
+// Simulasi demo: paksa satu member menjadi pasif >14 hari, terbitkan kupon bulan ini,
+// lalu kirim pesan simulasi. Kupon tetap maksimal satu per member per bulan.
+function simulateEndMonthForMember(customerId, userId = null, now = new Date()) {
+  const db = getDb();
+  const member = db.prepare(`
+    SELECT m.*, c.name, c.phone, c.customer_code, c.status AS customer_status
+    FROM memberships m
+    JOIN customers c ON c.id = m.customer_id
+    WHERE m.customer_id = ?
+  `).get(customerId);
+
+  if (!member) fail('Member tidak ditemukan.', 404);
+  if (member.status !== 'ACTIVE' || member.customer_status !== 'ACTIVE') {
+    fail('Member harus berstatus aktif untuk simulasi tanggal tua.');
+  }
+
+  const nowIso = now.toISOString();
+  const simulatedAt = new Date(now.getTime() - (INACTIVE_DAYS + 1) * 86400000).toISOString();
+  db.prepare('UPDATE memberships SET last_transaction_at = ?, updated_at = ? WHERE id = ?')
+    .run(simulatedAt, nowIso, member.id);
+
+  const monthInfo = getMonthEndInfo(now);
+  const couponCode = `BC-TU-${monthInfo.month_key.replace('-', '')}-${String(member.customer_id).padStart(4, '0')}`;
+  let coupon = db.prepare('SELECT * FROM member_coupons WHERE customer_id = ? AND campaign_id = ?')
+    .get(member.customer_id, monthInfo.campaign_id);
+  let created = false;
+
+  if (!coupon) {
+    const expiresAt = new Date(now.getTime() + COUPON_VALID_DAYS * 86400000).toISOString();
+    const insert = db.prepare(`
+      INSERT INTO member_coupons (
+        coupon_code, customer_id, campaign_id, discount_percent, status,
+        issued_at, expires_at, used_at, used_by, created_at
+      ) VALUES (?, ?, ?, 10, 'ISSUED', ?, ?, NULL, NULL, ?)
+    `).run(couponCode, member.customer_id, monthInfo.campaign_id, nowIso, expiresAt, nowIso);
+    coupon = db.prepare('SELECT * FROM member_coupons WHERE id = ?').get(insert.lastInsertRowid);
+    created = true;
+  } else if (coupon.status === 'USED') {
+    fail('Kupon bulan ini sudah dipakai. Tunggu bulan berikutnya untuk kupon baru.');
+  } else if (coupon.status === 'EXPIRED') {
+    fail('Kupon bulan ini sudah kedaluwarsa. Tunggu bulan berikutnya untuk kupon baru.');
+  }
+
+  const customer = { id: member.customer_id, name: member.name, phone: member.phone };
+  const body = buildCouponMessage(customer, coupon);
+  const message = deliverMessage(db, {
+    customer,
+    messageType: 'END_MONTH_COUPON',
+    body,
+    campaignCode: monthInfo.campaign_id,
+    couponId: coupon.id,
+    couponCode: coupon.coupon_code,
+    now
+  });
+
+  return {
+    success: true,
+    campaign: monthInfo,
+    coupon,
+    created,
+    resent: !created,
+    message,
+    last_transaction_at: simulatedAt
+  };
+}
+
 module.exports = {
   SIMULATION_PROVIDER,
   BASE_CATALOG,
@@ -662,6 +728,7 @@ module.exports = {
   listCoupons,
   redeemCoupon,
   runEndMonthPromo,
+  simulateEndMonthForMember,
   expireCoupons,
   getMonthEndInfo
 };

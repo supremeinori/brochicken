@@ -457,6 +457,7 @@ Membership terintegrasi dengan data pelanggan. Nomor WhatsApp tetap menjadi iden
 | FR-09.34 | Halaman `/simulasi` harus menerima parameter `phone` dan `name` untuk langsung terhubung ke nomor member. |
 | FR-09.35 | Admin harus menerima event SSE untuk member baru, pesan terkirim, kupon dipakai, dan promo dijalankan. |
 | FR-09.36 | Sistem harus menampilkan statistik total member, member baru bulan ini, member pasif lebih dari 14 hari, serta kupon terbit dan terpakai. |
+| FR-09.37 | Admin harus dapat mensimulasikan tanggal tua untuk satu member: sistem mengubah `last_transaction_at` menjadi 15 hari lalu, menerbitkan kupon bulan ini jika belum ada, dan mengirim pesan simulasi. Kupon tetap maksimal satu per member per bulan. |
 
 ## 4. Kebutuhan Nonfungsional (Non-Functional Requirements)
 

@@ -231,6 +231,33 @@ router.get('/qr/:code.png', async (req, res) => {
   }
 });
 
+// POST /api/membership/members/:customerId/simulate-end-month
+// Demo: paksa member pasif >14 hari, terbitkan kupon, dan kirim pesan simulasi.
+router.post('/members/:customerId/simulate-end-month', (req, res) => {
+  try {
+    const customerId = parseInt(req.params.customerId, 10);
+    const result = membership.simulateEndMonthForMember(customerId, req.session.user.id);
+    const eventHub = require('../services/eventHub');
+    eventHub.broadcastToAdmins('end_month_promo_run', {
+      campaign: result.campaign.campaign_id,
+      eligible: 1,
+      issued: result.created ? 1 : 0,
+      skipped: false,
+      customer_id: customerId,
+      timestamp: new Date().toISOString()
+    });
+    res.json({
+      success: true,
+      message: result.created
+        ? 'Member disimulasikan pasif dan kupon tanggal tua berhasil dikirim.'
+        : 'Kupon bulan ini sudah ada. Pesan kupon dikirim ulang.',
+      data: result
+    });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
 // POST /api/membership/campaigns/end-month/run
 router.post('/campaigns/end-month/run', (req, res) => {
   try {

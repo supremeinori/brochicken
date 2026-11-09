@@ -2650,6 +2650,7 @@ async function renderMembership() {
         </div>
         <div class="membership-banner-sub">
           Welcome message, promo QR, dan kupon 10% dikirim sebagai simulasi. Semua pesan tersimpan di outbox CRM.
+          Tombol <strong style="color: #FDE68A;">Kirim Kupon</strong> pada tabel member memaksa satu member menjadi pasif 15 hari lalu langsung mengirim kupon tanggal tua.
         </div>
       </div>
       <a href="/daftar-member" target="_blank" class="btn btn-primary" style="font-size: 12px; padding: 8px 14px; text-decoration: none;">
@@ -2882,6 +2883,7 @@ async function loadMembershipMembers() {
         <td style="text-align: right; white-space: nowrap;">
           <button class="btn btn-secondary btn-sm" onclick="openMemberDetail(${m.customer_id})">Detail</button>
           <button class="btn btn-primary btn-sm" onclick="openTransactionModal(${m.customer_id})">Catat Transaksi</button>
+          <button class="btn btn-secondary btn-sm" style="color: #92400E; border-color: #FDE68A; background: #FEF3C7;" onclick="simulateMemberEndMonth(${m.customer_id})">Kirim Kupon</button>
         </td>
       </tr>
     `).join('');
@@ -3088,6 +3090,7 @@ async function openMemberDetail(customerId) {
       </div>
       <div class="modal-footer">
         <a class="btn btn-secondary" href="/simulasi?phone=${encodeURIComponent(membership.phone)}&name=${encodeURIComponent(membership.name)}" target="_blank">Buka WhatsApp Simulasi</a>
+        <button class="btn btn-secondary" style="color: #92400E; border-color: #FDE68A; background: #FEF3C7;" onclick="simulateMemberEndMonth(${customerId}, true)">Simulasi Tanggal Tua &amp; Kirim Kupon</button>
         <button class="btn btn-primary" onclick="closeModal()">Tutup</button>
       </div>
     `;
@@ -3195,6 +3198,22 @@ async function redeemMemberCoupon(couponId, reopenCustomerId = null) {
     showToast(json.message);
     if (currentRoute === 'membership') loadMembershipData();
     if (reopenCustomerId) openMemberDetail(reopenCustomerId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function simulateMemberEndMonth(customerId, reopenDetail = false) {
+  const confirmed = window.confirm('Simulasi tanggal tua untuk member ini? Sistem akan mengubah transaksi terakhir menjadi 15 hari lalu, menerbitkan kupon 10%, dan mengirim pesan simulasi.');
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/membership/members/${customerId}/simulate-end-month`, { method: 'POST' });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Gagal mengirim kupon.');
+    showToast(json.message);
+    loadMembershipData();
+    if (reopenDetail) openMemberDetail(customerId);
   } catch (err) {
     showToast(err.message, 'error');
   }

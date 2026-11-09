@@ -75,6 +75,14 @@ const fresh = membership.registerMember({
   now
 });
 
+const httpSim = membership.registerMember({
+  name: 'Member HTTP Tanggal Tua',
+  phone: uniquePhone(5),
+  campaignCode: null,
+  consent: true,
+  now
+});
+
 // 1. Registrasi member baru.
 test('Registrasi nomor baru membuat pelanggan, membership, dan welcome message', () => {
   assert.ok(inactive.customer.id, 'Pelanggan harus dibuat.');
@@ -230,6 +238,32 @@ test('Pesan kupon tersimpan di outbox simulasi', () => {
   assert.ok(msg.body.includes('Diskon 10%'));
 });
 
+test('Simulasi tanggal tua per member memaksa pasif, menerbitkan kupon, dan mengirim pesan', () => {
+  const simPhone = uniquePhone(4);
+  const member = membership.registerMember({
+    name: 'Member Simulasi Tanggal Tua',
+    phone: simPhone,
+    campaignCode: 'QR_OUTLET',
+    consent: true,
+    now
+  });
+
+  const simulated = membership.simulateEndMonthForMember(member.customer.id, 1, now);
+  assert.strictEqual(simulated.created, true);
+  assert.strictEqual(simulated.coupon.discount_percent, 10);
+  assert.ok(new Date(simulated.last_transaction_at).getTime() < now.getTime() - 14 * 86400000);
+  assert.ok(simulated.message.id, 'Pesan kupon harus dibuat.');
+  assert.strictEqual(simulated.message.message_type, 'END_MONTH_COUPON');
+
+  const resent = membership.simulateEndMonthForMember(member.customer.id, 1, now);
+  assert.strictEqual(resent.created, false);
+  assert.strictEqual(resent.resent, true);
+  assert.strictEqual(resent.coupon.id, simulated.coupon.id);
+  const count = db.prepare('SELECT COUNT(*) AS c FROM member_coupons WHERE customer_id = ?')
+    .get(member.customer.id).c;
+  assert.strictEqual(count, 1, 'Simulasi ulang tidak boleh membuat kupon ganda.');
+});
+
 // -------------------------------------------------------------
 // PENGUJIAN HTTP
 // -------------------------------------------------------------
@@ -342,7 +376,20 @@ const server = app.listen(3998, async () => {
     console.log(' -> OK: Endpoint catat transaksi admin berfungsi.');
     passCount++;
 
-    // 17. Endpoint manual promo berjalan.
+    // 18. Endpoint simulasi tanggal tua per member.
+    const simRes = await fetch(`${baseUrl}/api/membership/members/${httpSim.customer.id}/simulate-end-month`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie }
+    });
+    const simData = await simRes.json();
+    assert.strictEqual(simRes.status, 200);
+    assert.strictEqual(simData.success, true);
+    assert.strictEqual(simData.data.created, true);
+    assert.strictEqual(simData.data.coupon.discount_percent, 10);
+    console.log(' -> OK: Endpoint simulasi tanggal tua mengirim kupon per member.');
+    passCount++;
+
+    // 19. Endpoint manual promo berjalan.
     const runRes = await fetch(`${baseUrl}/api/membership/campaigns/end-month/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
