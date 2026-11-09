@@ -40,6 +40,12 @@ npm test
 
 # Uji Integrasi Server & Seluruh Endpoint API
 node tests/server.test.js
+
+# Uji 2 POV Real-Time (SSE Admin & Pelanggan)
+npm run test:realtime
+
+# Jalankan seluruh rangkaian pengujian
+npm run test:all
 ```
 
 ---
@@ -85,3 +91,8 @@ Sistem telah diinisialisasi otomatis dengan data awal (*auto-seed*):
    - **Proteksi SOP:** Sistem menolak penonaktifan admin yang masih memegang tiket aktif (Baru/Diproses).
 7. **Pencadangan Database (Khusus Owner):**
    - Tombol langsung untuk mengunduh salinan mentah file `brochicken_crm.sqlite`.
+8. **Simulasi WhatsApp 2 POV Real-Time (SSE):**
+   - POV Pelanggan publik di `/simulasi` tanpa login, dengan 5 skenario komplain cepat.
+   - POV Admin di menu **Simulasi WA (AI)** menerima chat masuk secara live, lengkap dengan analisis AI Triage dan tiket CRM otomatis.
+   - Balasan manual admin (Human-in-the-Loop) langsung muncul di layar pelanggan melalui Server-Sent Events.
+   - Countdown SLA 60 menit berjalan langsung dan status tiket ikut tersinkron setelah admin merespons.

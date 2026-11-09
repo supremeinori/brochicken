@@ -1064,3 +1064,58 @@ textarea.form-control {
   font-style: italic;
   align-self: flex-start;
 }
+
+/* Admin Human-in-the-Loop Reply Box */
+.admin-reply-box {
+  background-color: #FFF7ED;
+  border: 1px solid #FFEDD5;
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.admin-reply-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #C2410C;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-reply-textarea {
+  width: 100%;
+  border: 1px solid #CBD5E1;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+  box-sizing: border-box;
+}
+
+.quick-reply-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.quick-reply-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid #CBD5E1;
+  background-color: #FFFFFF;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quick-reply-btn:hover {
+  background-color: #FED7AA;
+  border-color: #F97316;
+  color: #C2410C;
+}

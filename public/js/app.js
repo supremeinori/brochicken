@@ -32,6 +32,16 @@ function formatDateIndo(isoStr) {
   }
 }
 
+// Helper: Escape HTML agar teks dari pelanggan/admin tidak dieksekusi sebagai markup (cegah XSS)
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Helper: Close Modal
 function closeModal() {
   const container = document.getElementById('modal-container');
@@ -1887,7 +1897,7 @@ async function handleChangeOwnerPassword(e) {
 }
 
 // -------------------------------------------------------------
-// SIMULASI WHATSAPP & AI TRIAGE (HUMAN-IN-THE-LOOP)
+// SIMULASI WHATSAPP & AI TRIAGE (HUMAN-IN-THE-LOOP & REAL-TIME 2-POV)
 // -------------------------------------------------------------
 let simMessages = [
   {
@@ -1901,20 +1911,132 @@ let lastSimAnalysis = null;
 let lastSimTicket = null;
 let lastSimCustomer = null;
 let isSimLoading = false;
+let adminSSE = null;
+
+function initAdminSSE() {
+  if (adminSSE) return;
+
+  adminSSE = new EventSource('/api/simulation/admin/stream');
+
+  // Event: Chat baru dari pelanggan via Web WhatsApp publik (/simulasi)
+  adminSSE.addEventListener('new_customer_chat', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      lastSimAnalysis = data.analysis;
+      lastSimCustomer = data.customer;
+      lastSimTicket = data.ticket;
+
+      // Tambahkan chat pelanggan ke feed admin
+      simMessages.push({
+        sender: 'cust',
+        name: data.customer ? data.customer.name : 'Pelanggan',
+        text: data.message,
+        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      });
+
+      // Tambahkan auto-reply AI
+      if (data.reply) {
+        simMessages.push({
+          sender: 'ai',
+          text: data.reply,
+          time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+
+      showToast(`🔔 Chat baru masuk dari ${data.customer ? data.customer.name : 'Pelanggan'}!`);
+
+      // Perbarui tampilan
+      const chatBody = document.getElementById('sim-chat-body');
+      if (chatBody) {
+        chatBody.innerHTML = renderSimChatBubbles();
+        scrollSimChatToBottom();
+      }
+
+      const inspectorEl = document.getElementById('sim-inspector-content');
+      if (inspectorEl) inspectorEl.innerHTML = renderSimInspectorContent();
+
+      const ticketContentEl = document.getElementById('sim-ticket-content');
+      if (ticketContentEl) ticketContentEl.innerHTML = renderSimTicketContent();
+      startSimSlaTicker();
+
+      const replyTargetEl = document.getElementById('admin-reply-target-name');
+      if (replyTargetEl) replyTargetEl.innerText = data.customer ? data.customer.name : 'Pelanggan';
+    } catch (err) {
+      console.error('Error parse SSE new_customer_chat:', err);
+    }
+  });
+
+  // Event: Admin lain membalas chat
+  adminSSE.addEventListener('admin_reply_sent', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      // Hindari duplikasi jika admin saat ini yang mengirim
+      const exists = simMessages.some(m => m.sender === 'admin' && m.text === data.message);
+      if (!exists) {
+        simMessages.push({
+          sender: 'admin',
+          name: data.admin_name,
+          text: data.message,
+          time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        });
+        const chatBody = document.getElementById('sim-chat-body');
+        if (chatBody) {
+          chatBody.innerHTML = renderSimChatBubbles();
+          scrollSimChatToBottom();
+        }
+      }
+
+      // Sinkronkan status tiket di kartu CRM bila admin lain membalas tiket yang sama
+      if (lastSimTicket && data.ticket_id && Number(data.ticket_id) === Number(lastSimTicket.id)) {
+        lastSimTicket.status = 'IN_PROGRESS';
+        if (!lastSimTicket.first_response_at) lastSimTicket.first_response_at = data.timestamp || new Date().toISOString();
+        const ticketContentEl = document.getElementById('sim-ticket-content');
+        if (ticketContentEl) {
+          ticketContentEl.innerHTML = renderSimTicketContent();
+          startSimSlaTicker();
+        }
+      }
+    } catch (err) {}
+  });
+}
 
 function renderSimChatBubbles() {
   let html = simMessages.map(msg => {
-    const isCust = msg.sender === 'cust';
-    return `
-      <div class="wa-bubble ${isCust ? 'wa-bubble-cust' : 'wa-bubble-ai'}">
-        <div class="wa-bubble-sender">${isCust ? (msg.name || 'Pelanggan') : 'Bro Chicken Assistant (AI)'}</div>
-        <div>${msg.text}</div>
-        <div class="wa-time">
-          <span>${msg.time}</span>
-          ${isCust ? '<span style="color: #38BDF8;">&check;&check;</span>' : ''}
+    if (msg.sender === 'cust') {
+      return `
+        <div class="wa-bubble wa-bubble-cust">
+          <div class="wa-bubble-sender">${escapeHtml(msg.name || 'Pelanggan')}</div>
+          <div>${escapeHtml(msg.text)}</div>
+          <div class="wa-time">
+            <span>${msg.time}</span>
+            <span style="color: #38BDF8;">&check;&check;</span>
+          </div>
         </div>
-      </div>
-    `;
+      `;
+    } else if (msg.sender === 'admin') {
+      return `
+        <div class="wa-bubble wa-bubble-ai" style="border-left: 3px solid var(--primary); background: #FFF7ED;">
+          <div class="wa-bubble-sender" style="color: #EA580C; display: flex; align-items: center; gap: 4px;">
+            <span>${escapeHtml(msg.name || 'Admin')}</span>
+            <span class="badge badge-warning" style="font-size: 9px; padding: 1px 4px;">Human-in-the-Loop</span>
+          </div>
+          <div>${escapeHtml(msg.text)}</div>
+          <div class="wa-time">
+            <span>${msg.time}</span>
+          </div>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="wa-bubble wa-bubble-ai">
+          <div class="wa-bubble-sender">Bro Chicken Assistant (AI)</div>
+          <div>${escapeHtml(msg.text)}</div>
+          <div class="wa-time">
+            <span>${msg.time}</span>
+          </div>
+        </div>
+      `;
+    }
   }).join('');
 
   if (isSimLoading) {
@@ -1933,7 +2055,7 @@ function renderSimInspectorContent() {
     return `
       <div style="padding: 16px 0; text-align: center; color: var(--text-muted); font-size: 12.5px;">
         Belum ada pesan yang dianalisis.<br>
-        Silakan klik salah satu <strong>Skenario Contoh</strong> di atas atau ketik keluhan pelanggan di layar WhatsApp.
+        Buka <a href="/simulasi" target="_blank" style="color: var(--primary); font-weight: 600;">Layar Pelanggan (/simulasi)</a> di tab sebelah untuk mencoba kirim chat secara live!
       </div>
     `;
   }
@@ -1941,7 +2063,6 @@ function renderSimInspectorContent() {
   const isComplaint = lastSimAnalysis.is_complaint;
   const catLabel = categoryLabels[lastSimAnalysis.category] || lastSimAnalysis.category;
   const prioLabel = priorityLabels[lastSimAnalysis.priority] || lastSimAnalysis.priority;
-
   const prioBadgeClass = lastSimAnalysis.priority === 'HIGH' ? 'badge-danger' : (lastSimAnalysis.priority === 'MEDIUM' ? 'badge-warning' : 'badge-info');
 
   return `
@@ -1955,56 +2076,108 @@ function renderSimInspectorContent() {
     </div>
     <div class="inspector-row">
       <span class="inspector-label">Kategori Masalah</span>
-      <span class="inspector-value"><strong>${catLabel}</strong></span>
+      <span class="inspector-value"><strong>${escapeHtml(catLabel)}</strong></span>
     </div>
     <div class="inspector-row">
       <span class="inspector-label">Tingkat Prioritas</span>
-      <span class="inspector-value"><span class="badge ${prioBadgeClass}">${prioLabel}</span></span>
+      <span class="inspector-value"><span class="badge ${prioBadgeClass}">${escapeHtml(prioLabel)}</span></span>
     </div>
     <div class="inspector-row">
       <span class="inspector-label">Sentimen Pelanggan</span>
       <span class="inspector-value">
         <span class="badge ${lastSimAnalysis.sentiment === 'NEGATIVE' ? 'badge-danger' : (lastSimAnalysis.sentiment === 'POSITIVE' ? 'badge-success' : 'badge-neutral')}">
-          ${lastSimAnalysis.sentiment}
+          ${escapeHtml(lastSimAnalysis.sentiment)}
         </span>
       </span>
     </div>
     <div class="inspector-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
       <span class="inspector-label">Ringkasan Masalah yang Diekstrak AI:</span>
       <span class="inspector-value" style="text-align: left; font-weight: 500; color: #1E293B; background: #F8FAFC; padding: 6px 10px; border-radius: 4px; width: 100%; border: 1px solid #E2E8F0;">
-        ${lastSimAnalysis.extracted_problem || '-'}
+        ${escapeHtml(lastSimAnalysis.extracted_problem || '-')}
       </span>
     </div>
   `;
+}
+
+// Helper: Hitung sisa waktu SLA 60 menit
+function getSlaRemaining(dueIso) {
+  const due = new Date(dueIso).getTime();
+  if (!Number.isFinite(due)) {
+    return { label: 'SLA tidak tersedia', badgeClass: 'badge-neutral', expired: false };
+  }
+  const diffMs = due - Date.now();
+  if (diffMs <= 0) {
+    return { label: 'SLA terlampaui', badgeClass: 'badge-danger', expired: true };
+  }
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const timeText = hours > 0
+    ? `${hours}j ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}d`
+    : `${minutes}m ${String(seconds).padStart(2, '0')}d`;
+  return {
+    label: `Sisa ${timeText}`,
+    badgeClass: diffMs <= 15 * 60000 ? 'badge-warning' : 'badge-info',
+    expired: false
+  };
+}
+
+let simSlaTicker = null;
+
+function updateSimSlaCountdown() {
+  const el = document.getElementById('sim-sla-countdown');
+  if (!el || !lastSimTicket || !lastSimTicket.sla_due_at) {
+    if (simSlaTicker) {
+      clearInterval(simSlaTicker);
+      simSlaTicker = null;
+    }
+    return;
+  }
+  const sla = getSlaRemaining(lastSimTicket.sla_due_at);
+  el.className = `badge ${sla.badgeClass}`;
+  el.innerText = sla.label;
+}
+
+function startSimSlaTicker() {
+  if (simSlaTicker) clearInterval(simSlaTicker);
+  simSlaTicker = setInterval(updateSimSlaCountdown, 1000);
+  updateSimSlaCountdown();
 }
 
 function renderSimTicketContent() {
   if (!lastSimTicket) {
     return `
       <div style="padding: 14px 0; text-align: center; color: var(--text-muted); font-size: 12.5px;">
-        Tiket belum dibuat. Kirim pesan yang berisi komplain agar AI otomatis men-generate tiket keluhan.
+        Tiket belum dibuat. Kirim pesan yang berisi komplain agar AI otomatis men-generate tiket keluhan resmi.
       </div>
     `;
   }
 
+  const status = lastSimTicket.status || 'NEW';
+  const statusLabel = statusLabels[status] || status;
+  const statusClass = status === 'RESOLVED' ? 'badge-success' : (status === 'IN_PROGRESS' ? 'badge-warning' : 'badge-info');
+  const sla = getSlaRemaining(lastSimTicket.sla_due_at);
+
   return `
     <div class="ticket-sync-box">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px;">
         <span style="font-weight: 700; font-size: 14px; color: var(--primary);">
-          #${lastSimTicket.ticket_code}
+          #${escapeHtml(lastSimTicket.ticket_code)}
         </span>
-        <span class="badge badge-info">Status: Baru</span>
+        <span class="badge ${statusClass}">Status: ${escapeHtml(statusLabel)}</span>
       </div>
       <div style="font-size: 12px; color: var(--text-body); margin-bottom: 4px;">
-        <strong>Pelanggan:</strong> ${lastSimCustomer ? lastSimCustomer.name : 'Pelanggan'} (${lastSimCustomer ? lastSimCustomer.customer_code : '-'})
+        <strong>Pelanggan:</strong> ${escapeHtml(lastSimCustomer ? lastSimCustomer.name : 'Pelanggan')} (${escapeHtml(lastSimCustomer ? lastSimCustomer.customer_code : '-')})
       </div>
-      <div style="font-size: 12px; color: var(--text-body); margin-bottom: 4px;">
-        <strong>Batas Respons (SLA):</strong> 60 Menit Waktu Kalender
+      <div style="font-size: 12px; color: var(--text-body); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+        <strong>Batas Respons (SLA):</strong> 60 Menit
+        <span id="sim-sla-countdown" class="badge ${sla.badgeClass}">${escapeHtml(sla.label)}</span>
       </div>
       <div style="font-size: 12px; color: var(--text-body); margin-bottom: 8px;">
-        <strong>PIC Ditugaskan:</strong> ${lastSimTicket.assigned_to_name || 'Admin'}
+        <strong>PIC Ditugaskan:</strong> ${escapeHtml(lastSimTicket.assigned_to_name || 'Admin')}
       </div>
-      <button class="btn btn-primary" style="width: 100%; font-size: 12.5px; padding: 8px; font-weight: 600;" onclick="navigate('complaint-detail', ${lastSimTicket.id})">
+      <button class="btn btn-primary" style="width: 100%; font-size: 12.5px; padding: 8px; font-weight: 600;" onclick="navigate('complaint-detail', ${Number(lastSimTicket.id)})">
         Buka & Tindak Lanjuti di CRM (Human-in-the-Loop) &rarr;
       </button>
     </div>
@@ -2122,8 +2295,84 @@ async function handleSimSend() {
   }
 }
 
+// Handler: Kirim Balasan Manual Staf Admin ke Pelanggan (Human-in-the-Loop)
+async function handleSendAdminReply() {
+  const replyInput = document.getElementById('admin-reply-input');
+  if (!replyInput) return;
+
+  const message = replyInput.value.trim();
+  if (!message) {
+    showToast('Ketik pesan balasan terlebih dahulu.', 'error');
+    return;
+  }
+
+  const targetPhone = lastSimCustomer ? lastSimCustomer.phone : '081299887711';
+  const ticketId = lastSimTicket ? lastSimTicket.id : null;
+
+  try {
+    const res = await fetch('/api/simulation/admin/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: targetPhone,
+        ticket_id: ticketId,
+        message: message
+      })
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      simMessages.push({
+        sender: 'admin',
+        name: currentUser.name,
+        text: message,
+        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      });
+
+      replyInput.value = '';
+
+      // Respons admin menandai tiket IN_PROGRESS secara optimistis (server juga mencatat first_response_at)
+      if (lastSimTicket) {
+        lastSimTicket.status = 'IN_PROGRESS';
+        if (!lastSimTicket.first_response_at) {
+          lastSimTicket.first_response_at = new Date().toISOString();
+        }
+      }
+
+      const chatBody = document.getElementById('sim-chat-body');
+      if (chatBody) {
+        chatBody.innerHTML = renderSimChatBubbles();
+        scrollSimChatToBottom();
+      }
+
+      const ticketContentEl = document.getElementById('sim-ticket-content');
+      if (ticketContentEl) {
+        ticketContentEl.innerHTML = renderSimTicketContent();
+        startSimSlaTicker();
+      }
+
+      showToast('Balasan langsung terkirim ke WhatsApp pelanggan secara real-time!');
+    } else {
+      showToast(data.error || 'Gagal mengirim balasan admin.', 'error');
+    }
+  } catch (err) {
+    showToast('Kendala jaringan mengirim balasan admin.', 'error');
+  }
+}
+
+function setAdminQuickReply(text) {
+  const replyInput = document.getElementById('admin-reply-input');
+  if (replyInput) {
+    replyInput.value = text;
+    replyInput.focus();
+  }
+}
+
 async function renderSimulation() {
   const container = document.getElementById('content-area');
+
+  // Inisialisasi SSE listener untuk Admin
+  initAdminSSE();
 
   if (simSamples.length === 0) {
     try {
@@ -2136,10 +2385,20 @@ async function renderSimulation() {
   }
 
   container.innerHTML = `
-    <div style="margin-bottom: 16px;">
-      <p style="color: var(--text-muted); font-size: 13px;">
-        Simulasi chat interaktif WhatsApp untuk menguji integrasi <strong>AI Triage (Gemini 3.5 Flash Lite)</strong> yang secara otomatis mendeteksi keluhan pelanggan, membuat tiket resmi di database CRM, dan menyalakan timer SLA 60 menit dengan tetap mempertahankan kendali verifikasi staf manusia (<em>Human-in-the-Loop</em>).
-      </p>
+    <!-- Top Banner Split-Screen / 2 POV Mode -->
+    <div style="background: #0F172A; color: #FFFFFF; padding: 12px 18px; border-radius: var(--radius-md); margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+      <div>
+        <div style="font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 8px;">
+          <span class="badge badge-warning" style="font-size: 10px; padding: 2px 6px;">POV: ADMIN OPERASIONAL CRM</span>
+          <span>Konsol Live Chat & Real-Time Human-in-the-Loop</span>
+        </div>
+        <div style="font-size: 12px; color: #94A3B8; margin-top: 2px;">
+          Tiap pesan yang dikirim pelanggan dari WhatsApp publik akan langsung muncul di sini secara real-time.
+        </div>
+      </div>
+      <a href="/simulasi" target="_blank" class="btn btn-primary" style="font-size: 12px; padding: 8px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+        <span>🌐 Buka Layar Pelanggan (Tab Baru)</span> &nearr;
+      </a>
     </div>
 
     <!-- Quick Scenario Presets -->
@@ -2150,7 +2409,7 @@ async function renderSimulation() {
       <div class="preset-chips-container" id="sim-preset-chips">
         ${simSamples.map((s, idx) => `
           <button class="preset-chip" onclick="applySimulationSample(${idx})">
-            <span>${s.title}</span> &bull; <span class="badge ${s.badgeClass}" style="font-size: 9.5px; padding: 1px 5px;">${s.badge}</span>
+            <span>${escapeHtml(s.title)}</span> &bull; <span class="badge ${s.badgeClass}" style="font-size: 9.5px; padding: 1px 5px;">${escapeHtml(s.badge)}</span>
           </button>
         `).join('')}
       </div>
@@ -2166,7 +2425,7 @@ async function renderSimulation() {
               <div class="wa-name">Bro Chicken Customer Care</div>
               <div class="wa-status">
                 <span class="wa-status-dot"></span>
-                <span>Online &bull; Respon Cepat (SLA 60 Mnt)</span>
+                <span>Online &bull; Live Connected via SSE</span>
               </div>
             </div>
           </div>
@@ -2216,7 +2475,7 @@ async function renderSimulation() {
               <span>Analisis AI Triage Real-Time</span>
             </div>
             <span class="badge badge-warning" id="sim-engine-badge">
-              ${lastSimAnalysis ? lastSimAnalysis.engine : 'Gemini 3.5 Flash Lite'}
+              ${escapeHtml(lastSimAnalysis ? lastSimAnalysis.engine : 'Gemini 3.5 Flash Lite')}
             </span>
           </div>
 
@@ -2241,16 +2500,42 @@ async function renderSimulation() {
           </div>
         </div>
 
+        <!-- Human-in-the-Loop Direct Reply Card -->
+        <div class="inspector-card" style="border-left: 4px solid #10B981;">
+          <div class="inspector-header">
+            <div class="inspector-title">
+              <span style="color: #047857;">Balas Langsung ke WhatsApp Pelanggan</span>
+            </div>
+            <span class="badge badge-success" style="font-size: 10px;">Human-in-the-Loop</span>
+          </div>
+
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">
+            Target Pelanggan: <strong id="admin-reply-target-name">${escapeHtml(lastSimCustomer ? lastSimCustomer.name : 'Rian Pratama')}</strong>
+          </div>
+
+          <textarea id="admin-reply-input" class="admin-reply-textarea" placeholder="Tulis balasan langsung dari staf admin untuk pelanggan..."></textarea>
+
+          <div class="quick-reply-chips">
+            <button type="button" class="quick-reply-btn" onclick="setAdminQuickReply('Baik Kak, kami konfirmasi ke dapur dan segera kirimkan porsi ayam baru sekarang ya.')">🍗 Kirim Pengganti Dapur</button>
+            <button type="button" class="quick-reply-btn" onclick="setAdminQuickReply('Mohon maaf atas ketidaknyamanannya, kami proses pengembalian dana (refund) sekarang ya Kak.')">💰 Proses Refund</button>
+            <button type="button" class="quick-reply-btn" onclick="setAdminQuickReply('Mohon infokan detail nomor pesanan dan foto paket yang Kakak terima ya.')">📸 Minta Foto Pesanan</button>
+          </div>
+
+          <button class="btn btn-primary" style="width: 100%; margin-top: 8px; font-weight: 600;" onclick="handleSendAdminReply()">
+            Kirim Balasan Manual ke WhatsApp Pelanggan &rarr;
+          </button>
+        </div>
+
         <!-- Architecture Explainer Card -->
         <div class="card" style="background: #F8FAFC; border: 1px dashed var(--card-border);">
           <div style="font-weight: 700; font-size: 13px; color: var(--text-main); margin-bottom: 8px;">
-            Alur Human-in-the-Loop (SOP Bro Chicken):
+            Alur Dua Arah Real-Time (2 POV):
           </div>
           <ol style="padding-left: 18px; font-size: 12px; color: var(--text-body); line-height: 1.6;">
-            <li><strong>Chat Pelanggan:</strong> Pembeli menyampaikan keluhan melalui kanal WhatsApp resmi.</li>
-            <li><strong>AI Triage:</strong> LLM mengekstrak ringkasan masalah, kategori, prioritas, dan auto-reply awal.</li>
-            <li><strong>Auto Ticket Generation:</strong> Tiket keluhan resmi langsung dibuat di SQLite dengan timer SLA 60 menit.</li>
-            <li><strong>Human Override (Admin):</strong> Staf Admin memeriksa dapur/driver, menyelesaikan komplain, dan menutup tiket.</li>
+            <li><strong>POV 1 (Pelanggan):</strong> Membuka <code>/simulasi</code> di tab terpisah, kirim komplain tanpa login.</li>
+            <li><strong>AI Triage & SQLite:</strong> Gemini mengklasifikasikan masalah & tiket dibuat dengan timer SLA 60 menit.</li>
+            <li><strong>POV 2 (Admin Live):</strong> Chat pelanggan muncul seketika via SSE di layar Admin CRM.</li>
+            <li><strong>Human-in-the-Loop:</strong> Admin mengetik balasan manual di atas, dan seketika muncul di layar WhatsApp pelanggan!</li>
           </ol>
         </div>
       </div>
@@ -2258,6 +2543,7 @@ async function renderSimulation() {
   `;
 
   scrollSimChatToBottom();
+  startSimSlaTicker();
 }
 
 // -------------------------------------------------------------

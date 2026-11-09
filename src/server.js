@@ -62,6 +62,14 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/simulation', simulationRoutes);
 
+// Rute Publik Khusus Simulasi WhatsApp Pelanggan (Tanpa Login)
+app.get('/simulasi', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'simulasi.html'));
+});
+app.get('/chat-pelanggan', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'simulasi.html'));
+});
+
 // Fallback to index.html for SPA routes
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {

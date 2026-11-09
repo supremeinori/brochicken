@@ -2,9 +2,9 @@ const express = require('express');
 const { getDb, getNextCustomerCode, getNextTicketCode, normalizePhone } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
 const { triageCustomerMessage } = require('../services/aiTriage');
+const eventHub = require('../services/eventHub');
 
 const router = express.Router();
-router.use(requireAuth);
 
 const SAMPLES = [
   {
@@ -59,13 +59,8 @@ const SAMPLES = [
   }
 ];
 
-// GET /api/simulation/samples
-router.get('/samples', (req, res) => {
-  res.json({ success: true, data: SAMPLES });
-});
-
-// POST /api/simulation/chat
-router.post('/chat', async (req, res) => {
+// Helper: Proses Chat Pelanggan (Bisa dipanggil dari rute publik maupun privat)
+async function processCustomerChat(req, res) {
   try {
     const { name, phone, source, message } = req.body;
 
@@ -115,14 +110,10 @@ router.post('/chat', async (req, res) => {
       const createdAt = now.toISOString();
       const slaDueAt = new Date(now.getTime() + 60 * 60000).toISOString();
 
-      // Pilih Admin PIC
-      let assignedTo = null;
-      if (req.session.user && req.session.user.role === 'ADMIN') {
-        assignedTo = req.session.user.id;
-      } else {
-        const activeAdmin = db.prepare("SELECT id FROM users WHERE role = 'ADMIN' AND is_active = 1 LIMIT 1").get();
-        assignedTo = activeAdmin ? activeAdmin.id : req.session.user.id;
-      }
+      // Pilih Admin PIC aktif
+      const activeAdmin = db.prepare("SELECT id, name FROM users WHERE role = 'ADMIN' AND is_active = 1 LIMIT 1").get();
+      const assignedTo = activeAdmin ? activeAdmin.id : 1;
+      const createdBy = (req.session && req.session.user) ? req.session.user.id : assignedTo;
 
       const insertTicket = db.prepare(`
         INSERT INTO complaints (
@@ -138,19 +129,19 @@ router.post('/chat', async (req, res) => {
         message,
         analysis.priority,
         assignedTo,
-        req.session.user ? req.session.user.id : assignedTo,
+        createdBy,
         createdAt,
         slaDueAt
       );
 
-      // Catat log aktivitas pembuatan tiket otomatis oleh AI
+      // Catat log aktivitas pembuatan tiket
       const insertActivity = db.prepare(`
         INSERT INTO complaint_activities (complaint_id, user_id, activity_type, description, created_at)
         VALUES (?, ?, 'CREATED', ?, ?)
       `);
       insertActivity.run(
         ticketResult.lastInsertRowid,
-        req.session.user ? req.session.user.id : assignedTo,
+        createdBy,
         `Tiket dibuat otomatis oleh WhatsApp AI Triage (${analysis.engine}). Isu: ${analysis.extracted_problem}`,
         createdAt
       );
@@ -174,17 +165,127 @@ router.post('/chat', async (req, res) => {
       };
     }
 
-    res.json({
+    const payload = {
       success: true,
       customer,
       ticket,
       analysis,
+      message,
       reply: autoReplyText,
-      engine: analysis.engine
+      engine: analysis.engine,
+      timestamp: new Date().toISOString()
+    };
+
+    // 4. REAL-TIME BROADCAST: Kirim event chat baru ke seluruh Admin yang sedang aktif
+    eventHub.broadcastToAdmins('new_customer_chat', payload);
+
+    res.json(payload);
+  } catch (err) {
+    console.error('Error processCustomerChat:', err);
+    res.status(500).json({ success: false, error: 'Gagal memproses simulasi chat: ' + err.message });
+  }
+}
+
+// -------------------------------------------------------------
+// ENDPOINT PUBLIK (POV PELANGGAN - TANPA LOGIN)
+// -------------------------------------------------------------
+
+// GET /api/simulation/samples (Publik)
+router.get('/samples', (req, res) => {
+  res.json({ success: true, data: SAMPLES });
+});
+
+// GET /api/simulation/public/stream (SSE Listener untuk Pelanggan)
+router.get('/public/stream', (req, res) => {
+  const rawPhone = req.query.phone || '081299990001';
+  const normalizedPhone = normalizePhone(rawPhone);
+  eventHub.registerCustomer(normalizedPhone, res);
+});
+
+// POST /api/simulation/public/chat (Kirim Chat Pelanggan ke Sistem)
+router.post('/public/chat', (req, res) => {
+  processCustomerChat(req, res);
+});
+
+// POST /api/simulation/chat (Kompatibilitas rute sebelumnya)
+router.post('/chat', (req, res) => {
+  processCustomerChat(req, res);
+});
+
+// -------------------------------------------------------------
+// ENDPOINT TERPROTEKSI (POV ADMIN - BUTUH LOGIN)
+// -------------------------------------------------------------
+
+// GET /api/simulation/admin/stream (SSE Listener untuk Admin)
+router.get('/admin/stream', requireAuth, (req, res) => {
+  eventHub.registerAdmin(res);
+});
+
+// POST /api/simulation/admin/reply (Admin Membalas Chat Pelanggan Secara Manual)
+router.post('/admin/reply', requireAuth, (req, res) => {
+  try {
+    const { phone, ticket_id, message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, error: 'Pesan balasan admin tidak boleh kosong.' });
+    }
+
+    if (!phone) {
+      return res.status(400).json({ success: false, error: 'Nomor telepon tujuan tidak valid.' });
+    }
+
+    const normalizedPhone = normalizePhone(phone);
+    const db = getDb();
+    const adminUser = req.session.user;
+    const nowIso = new Date().toISOString();
+
+    // Jika terkait tiket, catat aktivitas di database dan update SLA first response jika perlu
+    let ticket = null;
+    if (ticket_id) {
+      ticket = db.prepare('SELECT * FROM complaints WHERE id = ?').get(ticket_id);
+      if (ticket) {
+        // Catat aktivitas balasan WhatsApp oleh admin
+        db.prepare(`
+          INSERT INTO complaint_activities (complaint_id, user_id, activity_type, description, created_at)
+          VALUES (?, ?, 'NOTE_ADDED', ?, ?)
+        `).run(ticket.id, adminUser.id, `Balasan Admin via WhatsApp: ${message}`, nowIso);
+
+        // Jika status masih NEW, tandai respons pertama dan ubah status jadi IN_PROGRESS
+        if (ticket.status === 'NEW') {
+          db.prepare(`
+            UPDATE complaints
+            SET status = 'IN_PROGRESS', first_response_at = ?
+            WHERE id = ?
+          `).run(nowIso, ticket.id);
+        }
+      }
+    }
+
+    const payload = {
+      sender: 'admin',
+      admin_name: adminUser.name,
+      message: message.trim(),
+      ticket_id: ticket ? ticket.id : null,
+      ticket_code: ticket ? ticket.ticket_code : null,
+      timestamp: nowIso
+    };
+
+    // 1. Kirim balasan real-time langsung ke SSE tab browser pelanggan
+    const delivered = eventHub.sendToCustomer(normalizedPhone, 'admin_reply', payload);
+
+    // 2. Broadcast ke semua tab admin lainnya untuk sinkronisasi
+    eventHub.broadcastToAdmins('admin_reply_sent', {
+      ...payload,
+      phone: normalizedPhone
+    });
+
+    res.json({
+      success: true,
+      delivered_to_stream: delivered,
+      message: 'Balasan berhasil dikirimkan ke pelanggan.'
     });
   } catch (err) {
-    console.error('Error /api/simulation/chat:', err);
-    res.status(500).json({ success: false, error: 'Gagal memproses simulasi chat: ' + err.message });
+    console.error('Error /api/simulation/admin/reply:', err);
+    res.status(500).json({ success: false, error: 'Gagal mengirim balasan admin: ' + err.message });
   }
 });
 

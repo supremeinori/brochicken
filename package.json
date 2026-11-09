@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/server.js",
     "seed": "node src/db/seed.js",
-    "test": "node tests/acceptance.test.js"
+    "test": "node tests/acceptance.test.js",
+    "test:realtime": "node tests/realtime_simulation.test.js",
+    "test:all": "node tests/acceptance.test.js && node tests/server.test.js && node tests/simulation.test.js && node tests/realtime_simulation.test.js"
   },
   "keywords": [
     "crm",
