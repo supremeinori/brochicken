@@ -6,176 +6,79 @@
   <title>WhatsApp Bro Chicken - Layanan Pelanggan (POV Pelanggan)</title>
   <link rel="stylesheet" href="/css/main.css">
   <link rel="icon" type="image/png" href="/images/logo.png">
-  <style>
-    /* Styling khusus antarmuka WhatsApp POV Pelanggan */
-    body {
-      background-color: #D1D7DB;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 16px;
-    }
-
-    .pov-banner {
-      width: 100%;
-      max-width: 680px;
-      background-color: #0F172A;
-      color: #FFFFFF;
-      padding: 10px 16px;
-      border-radius: var(--radius-md) var(--radius-md) 0 0;
-      font-size: 12.5px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .wa-app-window {
-      width: 100%;
-      max-width: 680px;
-      height: 780px;
-      background-color: #FFFFFF;
-      border-radius: 0 0 var(--radius-md) var(--radius-md);
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      border: 1px solid #CBD5E1;
-      border-top: none;
-    }
-
-    .wa-chat-container {
-      flex: 1;
-      background-color: #EFEAE2;
-      background-image: radial-gradient(#D5CEBE 1px, transparent 1px);
-      background-size: 18px 18px;
-      padding: 18px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .wa-top-config {
-      background-color: #F8FAFC;
-      border-bottom: 1px solid #E2E8F0;
-      padding: 10px 14px;
-    }
-
-    .preset-container {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    .badge-admin-tag {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 700;
-      background-color: #075E54;
-      color: #FFFFFF;
-      padding: 1px 6px;
-      border-radius: 3px;
-      margin-bottom: 4px;
-    }
-  </style>
 </head>
-<body>
-
-  <!-- Banner Info POV -->
-  <div class="pov-banner">
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <span class="badge badge-success" style="font-size: 11px;">POV: PELANGGAN (PUBLIK)</span>
-      <span style="color: #94A3B8;">Tanpa Perlu Login</span>
+<body class="public-body">
+  <main class="sim-page">
+    <div class="sim-topbar">
+      <div class="sim-pov">
+        <span class="badge badge-neutral">POV: PELANGGAN (PUBLIK)</span>
+        <span class="sim-note">Tanpa login</span>
+      </div>
+      <div class="sim-note">
+        Layar admin tersedia di <a href="/#simulation" target="_blank" rel="noopener">CRM Bro Chicken</a>
+      </div>
     </div>
-    <div style="font-size: 11.5px; color: #E2E8F0;">
-      Buka tab sebelah di <a href="/#simulation" target="_blank" style="color: #FB923C; text-decoration: underline; font-weight: 600;">http://localhost:3000</a> untuk POV Admin
-    </div>
-  </div>
 
-  <!-- Layar Chat WhatsApp -->
-  <div class="wa-app-window">
-    <!-- Header WhatsApp Resmi -->
-    <div class="wa-header">
-      <div class="wa-header-left">
-        <img src="/images/logo.png" alt="Bro Chicken Logo" class="wa-avatar">
-        <div>
-          <div class="wa-name" style="display: flex; align-items: center; gap: 6px;">
-            Bro Chicken Customer Care
-            <span style="color: #6EE7B7; font-size: 12px;" title="Akun Bisnis Resmi Terverifikasi">&check;</span>
-          </div>
-          <div class="wa-status">
-            <span class="wa-status-dot"></span>
-            <span id="sse-status-label">Terhubung Real-Time &bull; Respon Cepat (SLA 60 Mnt)</span>
+    <div class="wa-canvas sim-canvas">
+      <div class="wa-head">
+        <div class="wa-head-left">
+          <img src="/images/logo.png" alt="" class="wa-avatar">
+          <div>
+            <div class="wa-name">Bro Chicken Customer Care</div>
+            <div class="wa-status">
+              <span class="wa-dot"></span>
+              <span id="sse-status-label">Simulasi real-time &middot; SLA 60 menit</span>
+            </div>
           </div>
         </div>
+        <span class="wa-mode">Simulasi</span>
       </div>
-      <span class="badge badge-success" style="font-size: 10.5px; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3);">
-        Official WhatsApp
-      </span>
-    </div>
 
-    <!-- Bar Pengaturan Profil Pelanggan -->
-    <div class="wa-top-config">
-      <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px;">
-        <div class="wa-profile-field">
-          <label>Nama Anda</label>
+      <div class="wa-config">
+        <div class="wa-field">
+          <label for="cust-name">Nama Anda</label>
           <input type="text" id="cust-name" value="Rian Pratama">
         </div>
-        <div class="wa-profile-field">
-          <label>No. WhatsApp</label>
+        <div class="wa-field">
+          <label for="cust-phone">Nomor WhatsApp</label>
           <input type="text" id="cust-phone" value="081299887711">
         </div>
-        <div class="wa-profile-field">
-          <label>Kanal Pembelian</label>
+        <div class="wa-field">
+          <label for="cust-source">Kanal pembelian</label>
           <select id="cust-source">
             <option value="GOFOOD">GoFood</option>
             <option value="GRABFOOD">GrabFood</option>
-            <option value="DIRECT">Beli Langsung</option>
+            <option value="DIRECT">Beli langsung</option>
             <option value="OTHER">Lainnya</option>
           </select>
         </div>
       </div>
 
-      <!-- Skenario Cepat -->
-      <div style="margin-top: 8px;">
-        <div style="font-size: 10.5px; font-weight: 700; color: #64748B; text-transform: uppercase;">
-          PILIH SKENARIO CONTOH (KLIK UNTUK ISI OTOMATIS):
-        </div>
-        <div class="preset-container" id="preset-list">
-          <!-- Diisi via JS -->
+      <div class="sim-presets">
+        <div class="sim-config-label">Skenario contoh</div>
+        <div class="chip-row" id="preset-list"></div>
+      </div>
+
+      <div class="wa-feed" id="chat-stream">
+        <div class="wa-bubble system">
+          <div class="wa-sender">Bro Chicken Customer Care</div>
+          <div>Halo, selamat datang di layanan pelanggan Bro Chicken Margonda. Sampaikan keluhan pesanan atau pertanyaan Anda di sini, tim kami siap membantu.</div>
+          <div class="wa-time"><span id="init-time">Barusan</span></div>
         </div>
       </div>
-    </div>
 
-    <!-- Feed Percakapan WhatsApp -->
-    <div class="wa-chat-container" id="chat-stream">
-      <div class="wa-bubble wa-bubble-ai">
-        <div class="wa-bubble-sender">Bro Chicken Customer Care</div>
-        <div>Halo! Selamat datang di Layanan Pelanggan WhatsApp Bro Chicken Margonda. Silakan sampaikan keluhan pesanan atau pertanyaan Kakak di sini, tim kami siap membantu secepatnya! 🍗</div>
-        <div class="wa-time">
-          <span id="init-time">Barusan</span>
-        </div>
+      <div class="wa-composer">
+        <input type="text" id="chat-input" placeholder="Ketik keluhan atau pertanyaan Anda..." onkeydown="if(event.key === 'Enter') handleSendChat()">
+        <button type="button" class="wa-send" onclick="handleSendChat()" id="btn-send">Kirim</button>
       </div>
     </div>
-
-    <!-- Input Bar WhatsApp -->
-    <div class="wa-input-bar">
-      <input type="text" id="chat-input" placeholder="Ketik keluhan atau pertanyaan Anda..." onkeydown="if(event.key === 'Enter') handleSendChat()">
-      <button class="wa-btn-send" onclick="handleSendChat()" id="btn-send">
-        Kirim
-      </button>
-    </div>
-  </div>
+  </main>
 
   <script>
     let currentPhone = '081299887711';
     let sseSource = null;
     let isSending = false;
 
-    // Escape HTML agar pesan pelanggan/admin tidak dieksekusi sebagai markup (cegah XSS)
     function escapeHtml(value) {
       return String(value == null ? '' : value)
         .replace(/&/g, '&amp;')
@@ -185,10 +88,8 @@
         .replace(/'/g, '&#39;');
     }
 
-    // Inisialisasi Jam
     document.getElementById('init-time').innerText = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-    // Hubungkan SSE Real-time ke Server
     function initSSE() {
       const phoneInput = document.getElementById('cust-phone').value.trim() || '081299887711';
       currentPhone = phoneInput;
@@ -201,86 +102,74 @@
       sseSource = new EventSource(streamUrl);
 
       sseSource.addEventListener('connected', () => {
-        document.getElementById('sse-status-label').innerHTML = `<span class="wa-status-dot"></span> Terhubung Live &bull; Respon Cepat (SLA 60 Mnt)`;
+        document.getElementById('sse-status-label').innerHTML = '<span class="wa-dot"></span> Terhubung langsung &middot; SLA 60 menit';
       });
 
-      // Menerima balasan manual langsung dari Staf Admin secara Real-Time!
-      sseSource.addEventListener('admin_reply', (e) => {
+      sseSource.addEventListener('admin_reply', (event) => {
         try {
-          const data = JSON.parse(e.data);
+          const data = JSON.parse(event.data);
           addAdminMessage(data.admin_name, data.message, data.ticket_code);
         } catch (err) {
-          console.error('Error parse admin_reply SSE:', err);
+          console.error('Gagal membaca event admin_reply.', err);
         }
       });
 
-      // Menerima pesan sistem membership: welcome, promo QR, kupon tanggal tua.
-      sseSource.addEventListener('member_message', (e) => {
+      sseSource.addEventListener('member_message', (event) => {
         try {
-          const data = JSON.parse(e.data);
+          const data = JSON.parse(event.data);
           addMemberMessage(data.message_type, data.message, data.coupon_code);
         } catch (err) {
-          console.error('Error parse member_message SSE:', err);
+          console.error('Gagal membaca event member_message.', err);
         }
       });
 
       sseSource.onerror = () => {
-        document.getElementById('sse-status-label').innerHTML = `<span style="color: #F87171;">&bull; Menghubungkan ulang ke server...</span>`;
+        document.getElementById('sse-status-label').innerText = 'Menghubungkan ulang ke server...';
       };
     }
 
-    // Tambah bubble chat pelanggan
     function addCustomerMessage(text) {
       const chatStream = document.getElementById('chat-stream');
       const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
       const bubble = document.createElement('div');
-      bubble.className = 'wa-bubble wa-bubble-cust';
+      bubble.className = 'wa-bubble customer';
       bubble.innerHTML = `
-        <div class="wa-bubble-sender">${escapeHtml(document.getElementById('cust-name').value || 'Anda')}</div>
+        <div class="wa-sender">${escapeHtml(document.getElementById('cust-name').value || 'Anda')}</div>
         <div>${escapeHtml(text)}</div>
-        <div class="wa-time">
-          <span>${timeStr}</span>
-          <span style="color: #38BDF8;">&check;&check;</span>
-        </div>
+        <div class="wa-time"><span>${timeStr}</span> &middot; terkirim</div>
       `;
       chatStream.appendChild(bubble);
       scrollToBottom();
     }
 
-    // Tambah bubble balasan AI
     function addAIMessage(text) {
       const chatStream = document.getElementById('chat-stream');
       const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
       const bubble = document.createElement('div');
-      bubble.className = 'wa-bubble wa-bubble-ai';
+      bubble.className = 'wa-bubble system';
       bubble.innerHTML = `
-        <div class="wa-bubble-sender">Bro Chicken Assistant (AI)</div>
+        <div class="wa-sender">Bro Chicken Assistant</div>
         <div>${escapeHtml(text)}</div>
-        <div class="wa-time">
-          <span>${timeStr}</span>
-        </div>
+        <div class="wa-time"><span>${timeStr}</span></div>
       `;
       chatStream.appendChild(bubble);
       scrollToBottom();
     }
 
-    // Tambah bubble balasan langsung dari Admin manusia (Human-in-the-Loop)
     function addAdminMessage(adminName, text, ticketCode) {
       const chatStream = document.getElementById('chat-stream');
       const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
       const bubble = document.createElement('div');
-      bubble.className = 'wa-bubble wa-bubble-ai';
-      bubble.style.borderLeft = '3px solid #EA580C';
+      bubble.className = 'wa-bubble admin';
       bubble.innerHTML = `
-        <span class="badge-admin-tag">STAF RESMI BRO CHICKEN</span>
-        <div class="wa-bubble-sender" style="color: #EA580C;">${escapeHtml(adminName)} (Admin Bro Chicken)</div>
+        <div class="wa-sender">${escapeHtml(adminName)} &middot; staf Bro Chicken</div>
         <div>${escapeHtml(text)}</div>
         <div class="wa-time">
           <span>${timeStr}</span>
-          ${ticketCode ? `&bull; <span style="font-weight: 600;">#${escapeHtml(ticketCode)}</span>` : ''}
+          ${ticketCode ? ` &middot; <span>#${escapeHtml(ticketCode)}</span>` : ''}
         </div>
       `;
       chatStream.appendChild(bubble);
@@ -292,33 +181,29 @@
       chatStream.scrollTop = chatStream.scrollHeight;
     }
 
-    // Bubble pesan sistem membership (welcome, promo QR, kupon)
     function addMemberMessage(messageType, text, couponCode) {
       const chatStream = document.getElementById('chat-stream');
       const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
       const labels = {
-        WELCOME: 'MEMBERSHIP BRO CHICKEN',
-        QR_PROMO: 'PROMO QR MEMBER',
-        END_MONTH_COUPON: 'KUPON TANGGAL TUA'
+        WELCOME: 'Membership Bro Chicken',
+        QR_PROMO: 'Promo QR member',
+        END_MONTH_COUPON: 'Kupon tanggal tua'
       };
 
       const bubble = document.createElement('div');
-      bubble.className = 'wa-bubble wa-bubble-ai';
-      bubble.style.borderLeft = '3px solid #15803D';
+      bubble.className = 'wa-bubble system';
       bubble.innerHTML = `
-        <span class="badge-admin-tag" style="background-color: #15803D;">${escapeHtml(labels[messageType] || 'PESAN MEMBERSHIP')}</span>
-        <div class="wa-bubble-sender" style="color: #15803D;">Bro Chicken Membership (Simulasi)</div>
-        <div style="white-space: pre-wrap;">${escapeHtml(text || '')}</div>
+        <div class="wa-sender">${escapeHtml(labels[messageType] || 'Pesan membership')} &middot; simulasi</div>
+        <div class="pre-wrap">${escapeHtml(text || '')}</div>
         <div class="wa-time">
           <span>${timeStr}</span>
-          ${couponCode ? `&bull; <span style="font-weight: 600;">${escapeHtml(couponCode)}</span>` : ''}
+          ${couponCode ? ` &middot; <span>${escapeHtml(couponCode)}</span>` : ''}
         </div>
       `;
       chatStream.appendChild(bubble);
       scrollToBottom();
     }
 
-    // Kirim pesan chat pelanggan ke server
     async function handleSendChat() {
       if (isSending) return;
 
@@ -330,7 +215,6 @@
       const phone = document.getElementById('cust-phone').value.trim() || '081299887711';
       const source = document.getElementById('cust-source').value;
 
-      // Jika nomor berubah, perbarui koneksi SSE
       if (phone !== currentPhone) {
         initSSE();
       }
@@ -339,10 +223,9 @@
       input.value = '';
       isSending = true;
 
-      // Typing indicator
       const chatStream = document.getElementById('chat-stream');
       const typingEl = document.createElement('div');
-      typingEl.className = 'typing-indicator';
+      typingEl.className = 'wa-typing';
       typingEl.id = 'sim-typing';
       typingEl.innerText = 'Bro Chicken sedang mengetik...';
       chatStream.appendChild(typingEl);
@@ -371,7 +254,6 @@
       }
     }
 
-    // Ambil daftar skenario preset
     async function loadPresets() {
       try {
         const res = await fetch('/api/simulation/samples');
@@ -379,13 +261,11 @@
         if (data.success) {
           const listEl = document.getElementById('preset-list');
           listEl.innerHTML = data.data.map((s, idx) => `
-            <button class="preset-chip" onclick="applyPreset(${idx})">
-              <span>${escapeHtml(s.title)}</span>
-            </button>
+            <button type="button" class="chip" onclick="applyPreset(${idx})">${escapeHtml(s.title)}</button>
           `).join('');
           window.sampleData = data.data;
         }
-      } catch (e) {}
+      } catch (err) {}
     }
 
     function applyPreset(idx) {
@@ -396,8 +276,6 @@
       document.getElementById('cust-source').value = sample.source;
       document.getElementById('chat-input').value = sample.message;
       document.getElementById('chat-input').focus();
-
-      // Refresh SSE stream sesuai nomor baru
       initSSE();
     }
 
@@ -406,7 +284,6 @@
     });
 
     window.addEventListener('DOMContentLoaded', () => {
-      // Prefill dari tautan registrasi member: /simulasi?phone=62...&name=...
       const params = new URLSearchParams(window.location.search);
       const phoneParam = params.get('phone');
       const nameParam = params.get('name');

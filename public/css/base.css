@@ -1,0 +1,286 @@
+/* Bro Chicken CRM - tokens, reset, and base typography */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Ink and paper */
+  --ink-900: #1C1917;
+  --ink-800: #292524;
+  --ink-700: #44403C;
+  --ink-600: #57534E;
+  --ink-500: #78716C;
+  --ink-400: #A8A29E;
+
+  --paper: #FAF9F7;
+  --surface: #FFFFFF;
+  --surface-2: #F5F4F1;
+  --surface-3: #EFEDE9;
+
+  --line: #E7E5E4;
+  --line-strong: #D6D3D1;
+
+  /* Brand */
+  --brand-900: #7C2D12;
+  --brand-800: #9A3412;
+  --brand-700: #C2410C;
+  --brand-600: #EA580C;
+  --brand-100: #FFEDD5;
+  --brand-50: #FFF7ED;
+
+  /* Sidebar */
+  --sidebar-bg: #9A3412;
+  --sidebar-footer: #7C2D12;
+  --sidebar-text: #FFFFFF;
+  --sidebar-muted: #FFE7D1;
+
+  /* Semantic */
+  --success: #15803D;
+  --success-bg: #F0FDF4;
+  --success-line: #BBF7D0;
+  --warning: #92400E;
+  --warning-bg: #FFFBEB;
+  --warning-line: #FDE68A;
+  --danger: #B91C1C;
+  --danger-bg: #FEF2F2;
+  --danger-line: #FECACA;
+  --info: #0369A1;
+  --info-bg: #F0F9FF;
+  --info-line: #BAE6FD;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Shape */
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 8px;
+
+  /* Elevation: modal and toast only */
+  --shadow-1: 0 1px 2px rgba(28, 25, 23, 0.08);
+  --shadow-2: 0 24px 48px -20px rgba(28, 25, 23, 0.35);
+
+  /* Layout */
+  --sidebar-width: 248px;
+  --content-max: 1320px;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--paper);
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--paper);
+  color: var(--ink-700);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+dl,
+dd,
+ol,
+ul {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--ink-900);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: var(--brand-700);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--brand-800);
+}
+
+img {
+  max-width: 100%;
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-700);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--brand-100);
+  color: var(--ink-900);
+}
+
+/* Utilities */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.muted {
+  color: var(--ink-600);
+}
+
+.subtle {
+  color: var(--ink-500);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-warning {
+  color: var(--warning);
+}
+
+.text-brand {
+  color: var(--brand-800);
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-strong {
+  color: var(--ink-900);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link-strong:hover {
+  color: var(--brand-800);
+  text-decoration: underline;
+}
+
+.link-phone {
+  color: var(--success);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link-phone:hover {
+  color: #166534;
+  text-decoration: underline;
+}
+
+.hint-text {
+  color: var(--ink-600);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.empty-value {
+  color: var(--ink-500);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.mt-2 {
+  margin-top: 8px;
+}
+
+.mt-3 {
+  margin-top: 12px;
+}
+
+.mt-4 {
+  margin-top: 20px;
+}
+
+.mb-2 {
+  margin-bottom: 8px;
+}
+
+.pt-0 {
+  padding-top: 0;
+}
+
+.span-full {
+  grid-column: 1 / -1;
+}
+
+.pre-wrap {
+  white-space: pre-wrap;
+}
+
+.control-auto {
+  width: auto;
+  min-width: 160px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
