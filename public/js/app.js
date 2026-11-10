@@ -1251,7 +1251,7 @@ async function renderComplaintDetail(id) {
             <div class="panel-block">
               <div class="panel-block-title">Komunikasi WhatsApp</div>
               <p class="helper">Susun balasan dari template resmi, lalu kirim manual melalui WhatsApp.</p>
-              <button type="button" class="btn btn-secondary btn-block" onclick="openWhatsAppWithTicket(${t.customer_id}, ${t.id})">Buka template WhatsApp</button>
+              <button type="button" class="btn btn-secondary btn-block" onclick="openWhatsAppWithTicket(${t.customer_id}, '${escapeHtml(t.ticket_code)}')">Buka template WhatsApp</button>
             </div>
           </div>
         </div>
@@ -1350,10 +1350,10 @@ async function handleAddNoteSubmit(event, id) {
   }
 }
 
-function openWhatsAppWithTicket(customerId, ticketId) {
+function openWhatsAppWithTicket(customerId, ticketCode) {
   navigate('whatsapp');
   setTimeout(() => {
-    loadWhatsAppStudio(customerId, ticketId);
+    loadWhatsAppStudio(customerId, ticketCode);
   }, 120);
 }
 
@@ -1419,7 +1419,7 @@ function renderWhatsApp() {
   loadWhatsAppStudio();
 }
 
-async function loadWhatsAppStudio(preCustomerId = null, preTicketId = null) {
+async function loadWhatsAppStudio(preCustomerId = null, preTicketCode = null) {
   try {
     const res = await fetch('/api/templates');
     const json = await res.json();
@@ -1449,9 +1449,9 @@ async function loadWhatsAppStudio(preCustomerId = null, preTicketId = null) {
       `).join('');
     }
 
-    if (preTicketId) {
+    if (preTicketCode) {
       const ticketInput = document.getElementById('wa-ticket-input');
-      if (ticketInput) ticketInput.value = `TCK-2026-00${preTicketId}`;
+      if (ticketInput) ticketInput.value = preTicketCode;
     }
 
     updateWaPreview();
